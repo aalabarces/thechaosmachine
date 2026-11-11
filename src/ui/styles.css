@@ -1,0 +1,46 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none; /* los clicks pasan al canvas; cada pantalla que necesite input lo reactiva */
+  font: 16px/1.4 'Courier New', monospace;
+  color: #fff;
+  text-shadow: 0 1px 0 #000, 1px 0 0 #000, 0 -1px 0 #000, -1px 0 0 #000;
+}
+
+.hud {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  left: calc(12px + env(safe-area-inset-left));
+  display: flex;
+  gap: 18px;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+/* En dev la barra del debug UI ocupa el borde de arriba. */
+.hud.dev {
+  top: calc(44px + env(safe-area-inset-top));
+}
+
+.hud-money {
+  color: #7dff6a;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  font-size: 22px;
+  letter-spacing: 2px;
+}

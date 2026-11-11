@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>The Chaos Machine</title>
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+    <!-- npm run build swaps in the production engine -->
+    <script type="importmap">
+      { "imports": { "@weed.js/engine": "./node_modules/@weed.js/engine/dist/weed.bundle.esm.min.js" } }
+    </script>
+  </head>
+  <body>
+    <!-- La UI es HTML plano encima del canvas: src/ui/ la maneja. -->
+    <div id="ui-root"></div>
+
+    <script type="module">
+      import WEED from '@weed.js/engine';
+
+      const DEV = true; // npm run build sets this to false
+      // El juego se importa después del engine: sus módulos usan el global WEED que este import define.
+      const { boot } = await import('./src/main.js');
+      await boot(WEED, { dev: DEV });
+    </script>
+  </body>
+</html>
