@@ -31,7 +31,9 @@ src/
                     Mine, SafeHouseSign; fx/: Explosion, Fire
     systems/        estado compartido (SquadState, RunState, RunModifiers), SpawnDirector (heat, policía,
                     pandillas), SafeHouses (bares), explosiones, spawner de civiles, loot y efectos
-    world/          el mapa (littleCity por ahora; generador procedural más adelante)
+    world/          el mapa: mapGenerator (ciudad con semilla), mapTiles (tilemap con autotiles),
+                    sidewalkFlow (flowfield de veredas), generatedCity (lo pasa a la escena), cityMap
+                    (spawnea casas, árboles y props); el de littleCity queda como alternativa de dev
 ```
 
 Reglas:
@@ -44,3 +46,5 @@ Parámetros de dev (solo con `npm run dev`):
 - `?found=all` marca todo como encontrado (se pueden comprar todos los desbloqueos).
 - `?recruits=N` arranca cada capítulo con N reclutas.
 - `?weapon=bat|pistol|shotgun|smg` los reclutas sin arma del loadout arrancan con esa.
+- `?seed=N` siempre la misma ciudad (la semilla de cada capítulo sale en la consola).
+- `?map=littlecity` el mapa viejo de littleCity en vez de una ciudad generada.

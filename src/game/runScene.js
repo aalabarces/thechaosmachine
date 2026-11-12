@@ -28,6 +28,7 @@ import { SpawnDirector } from './systems/spawnDirector.js';
 import { CAR_SHEETS, WRECK_SHEET, CAR_ANGLES } from './entities/props/ParkedCar.js';
 import { WEAPON, WEAPONS, ARMOR } from './config/weapons.js';
 import { CITY_ENTITIES, loadCityData, spawnCity, spawnMines, nearestSidewalk } from './world/cityMap.js';
+import { getPreparedCity } from './world/generatedCity.js';
 import { SquadState, SQUAD_STATE_SCHEMA, setSquadTarget, squadCentroid, setSquadFocus, clearSquadFocus, FOCUS } from './systems/squadState.js';
 import { pickAt, isFocusValid } from './systems/picking.js';
 import { RunState, RUN_STATE_SCHEMA } from './systems/runState.js';
@@ -83,6 +84,39 @@ function clamp(v, min, max) {
 
 const _centroid = { x: 0, y: 0 };
 
+/** Texturas y hojas de la run (el tilemap y el flowfield van aparte: dependen de la ciudad). */
+const STATIC_ASSETS = {
+  textures: {
+    ...numberedTextures('house', 'houses', HOUSE_COUNT),
+    ...numberedTextures('tree', 'trees', TREE_COUNT),
+    blood: asset('img/fx/blood.png'),
+    muzzle1: asset('img/fx/muzzle1.png'),
+    muzzle2: asset('img/fx/muzzle2.png'),
+    muzzle3: asset('img/fx/muzzle3.png'),
+    scorch: asset('img/fx/explosion_decal.png'),
+    smoke: asset('img/fx/smoke.png'),
+    mine: asset('img/props/mine.png'),
+    bar_sign: asset('img/props/bar_sign.png'),
+    drop_money: asset('img/drops/money.png'),
+    drop_bat: asset('img/drops/bat.png'),
+    drop_pistol: asset('img/drops/pistol.png'),
+    drop_shotgun: asset('img/drops/shotgun.png'),
+    drop_smg: asset('img/drops/ak47.png'),
+    drop_armor: asset('img/drops/armor.png'),
+    trash: asset('img/props/trash.png'),
+    atm: asset('img/props/atm.png'),
+  },
+  spritesheets: {
+    ...personSheets(SHEETS.recruit, ROLE_ANIMATIONS.recruit),
+    ...personSheets(SHEETS.civilian, ROLE_ANIMATIONS.civilian),
+    ...personSheets(SHEETS.police, ROLE_ANIMATIONS.police),
+    ...personSheets([...SHEETS.gangYellow, ...SHEETS.gangGreen], ROLE_ANIMATIONS.gang),
+    ...carSheets(),
+    explosions: { json: asset('img/fx/explosions/explosions.json'), png: asset('img/fx/explosions/explosions.png'), excludeAnimations: ['explosion1'] },
+    fire: { json: asset('img/fx/fire/fuego.json'), png: asset('img/fx/fire/fuego.png') },
+  },
+};
+
 export class RunScene extends Scene {
   static config = {
     worldWidth: WORLD.width,
@@ -104,44 +138,24 @@ export class RunScene extends Scene {
     },
   };
 
-  static assets = {
-    textures: {
-      ...numberedTextures('house', 'houses', HOUSE_COUNT),
-      ...numberedTextures('tree', 'trees', TREE_COUNT),
-      blood: asset('img/fx/blood.png'),
-      muzzle1: asset('img/fx/muzzle1.png'),
-      muzzle2: asset('img/fx/muzzle2.png'),
-      muzzle3: asset('img/fx/muzzle3.png'),
-      scorch: asset('img/fx/explosion_decal.png'),
-      smoke: asset('img/fx/smoke.png'),
-      mine: asset('img/props/mine.png'),
-      bar_sign: asset('img/props/bar_sign.png'),
-      drop_money: asset('img/drops/money.png'),
-      drop_bat: asset('img/drops/bat.png'),
-      drop_pistol: asset('img/drops/pistol.png'),
-      drop_shotgun: asset('img/drops/shotgun.png'),
-      drop_smg: asset('img/drops/ak47.png'),
-      drop_armor: asset('img/drops/armor.png'),
-      trash: asset('img/props/trash.png'),
-      atm: asset('img/props/atm.png'),
-    },
-    spritesheets: {
-      ...personSheets(SHEETS.recruit, ROLE_ANIMATIONS.recruit),
-      ...personSheets(SHEETS.civilian, ROLE_ANIMATIONS.civilian),
-      ...personSheets(SHEETS.police, ROLE_ANIMATIONS.police),
-      ...personSheets([...SHEETS.gangYellow, ...SHEETS.gangGreen], ROLE_ANIMATIONS.gang),
-      ...carSheets(),
-      explosions: { json: asset('img/fx/explosions/explosions.json'), png: asset('img/fx/explosions/explosions.png'), excludeAnimations: ['explosion1'] },
-      fire: { json: asset('img/fx/fire/fuego.json'), png: asset('img/fx/fire/fuego.png') },
-    },
-    tilemaps: {
-      city: { json: asset('map/little_city_tilemap.json'), png: asset('map/tiles.png') },
-    },
-    // Flowfield horneado de las veredas (el que siguen los civiles al pasear).
-    flowfields: {
-      sidewalks: asset('map/flowfield_sidewalks.json'),
-    },
-  };
+  /**
+   * Getter: el tilemap y el flowfield de veredas son los de la ciudad que generó main.js para este
+   * capítulo (URLs blob:), o los horneados de littleCity si no hay ninguna preparada. La escena
+   * los lee al construirse, en la página, después de que main.js preparó la ciudad.
+   */
+  static get assets() {
+    const city = getPreparedCity();
+    return {
+      ...STATIC_ASSETS,
+      tilemaps: {
+        city: { json: city ? city.tilemapUrl : asset('map/little_city_tilemap.json'), png: asset('map/tiles.png') },
+      },
+      // Flowfield de las veredas (el que siguen los civiles al pasear).
+      flowfields: {
+        sidewalks: city ? city.flowfieldUrl : asset('map/flowfield_sidewalks.json'),
+      },
+    };
+  }
 
   static audios = soundFiles();
 
@@ -171,14 +185,18 @@ export class RunScene extends Scene {
   ];
 
   async preload() {
-    this.cityData = await loadCityData();
+    const city = getPreparedCity();
+    this.cityData = city ? city.objects : await loadCityData();
   }
 
   /** @param {{ modifiers?: object }} [data] lo que manda main.js (ver createNewGame) */
   create(data = {}) {
     // Las mejoras del perfil, antes de que aparezca nadie: los reclutas las leen al spawnear.
     writeRunModifiers(data?.modifiers);
-    spawnCity(this.cityData, data?.modifiers?.props ?? 1);
+    // Punto de partida del malón: hace falta antes de armar la ciudad (sin autos cerca) y para las
+    // safe houses (una cerca de acá).
+    this._start = nearestSidewalk(this.cityData, WORLD.width / 2, WORLD.height / 2);
+    spawnCity(this.cityData, data?.modifiers?.props ?? 1, this._start);
     Camera.setZoom(CAMERA.startZoom);
     // Estado del input (solo página): cuándo empezó el apretón y cuándo se movió el destino por última vez.
     this._pressAt = 0;
@@ -193,8 +211,6 @@ export class RunScene extends Scene {
     this._zoomGoal = CAMERA.startZoom;
     this.civilians = new CivilianSpawner(this.cityData.sidewalks || []);
     this.director = new SpawnDirector(this.cityData.sidewalks || []);
-    // Punto de partida del malón; las safe houses (una cerca de acá) son parte del mapa.
-    this._start = nearestSidewalk(this.cityData, WORLD.width / 2, WORLD.height / 2);
     this.safeHouses = new SafeHouses();
     this.safeHouses.setup(this.cityData.houses || [], this._start.x, this._start.y);
     /** @type {((text: string) => void) | null} avisos cortos (los asigna main.js) */
@@ -278,7 +294,10 @@ export class RunScene extends Scene {
       this._emptySince = 0;
       return;
     }
-    if (!this._seenRecruits) return;
+    // Recién empezado, los reclutas tardan un frame en aparecer: se espera a verlos. Pero si en
+    // runStartGraceMs no apareció ninguno (una run restaurada sin reclutas, un error al cargar),
+    // el capítulo termina igual: nunca queda una run sin malón y sin pantalla de fin.
+    if (!this._seenRecruits && now - this._startedAt < DIRECTOR.runStartGraceMs) return;
     if (this._emptySince === 0) this._emptySince = now;
     if (now - this._emptySince < DIRECTOR.runEndDelayMs) return;
     this._ended = true;

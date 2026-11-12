@@ -3,7 +3,7 @@
 // frente a las casas). Más adelante mapGenerator.js arma uno al azar con la misma salida.
 
 import { asset } from '../assets.js';
-import { PROPS, NAV, MINES } from '../config/balance.js';
+import { PROPS, NAV, MINES, SPAWN_SAFETY } from '../config/balance.js';
 import { House } from '../entities/props/House.js';
 import { Tree } from '../entities/props/Tree.js';
 import { TrashCan } from '../entities/props/TrashCan.js';
@@ -21,7 +21,7 @@ const MAX_PROPS_MULTIPLIER = 3;
 
 /** Pools de las entidades del mapa (van a static entities de la escena). */
 export const CITY_ENTITIES = [
-  [House, 80],
+  [House, 300],
   [Tree, 1300],
   [TrashCan, PROPS.trashCan.count * MAX_PROPS_MULTIPLIER],
   [ParkedCar, PROPS.parkedCar.count * MAX_PROPS_MULTIPLIER],
@@ -38,8 +38,9 @@ export async function loadCityData() {
 /**
  * Spawnea la escenografía y los props, y marca como no caminable lo que no se mueve.
  * @param {number} [propsMultiplier] mejora "Más para romper" del mercado (1 = la cantidad base)
+ * @param {{x: number, y: number}} [start] punto de partida del malón: sin autos cerca (explotan)
  */
-export function spawnCity(data, propsMultiplier = 1) {
+export function spawnCity(data, propsMultiplier = 1, start = null) {
   const mul = Math.min(MAX_PROPS_MULTIPLIER, Math.max(0, propsMultiplier));
   const houses = data.houses || [];
   for (let i = 0; i < houses.length; i++) House.spawn({ x: houses[i].x, y: houses[i].y });
@@ -48,7 +49,7 @@ export function spawnCity(data, propsMultiplier = 1) {
   for (let i = 0; i < trees.length; i++) Tree.spawn({ x: trees[i].x, y: trees[i].y, radius: trees[i].radius });
 
   spawnTrashCans(data, Math.round(PROPS.trashCan.count * mul));
-  spawnParkedCars(data, Math.round(PROPS.parkedCar.count * mul));
+  spawnParkedCars(data, Math.round(PROPS.parkedCar.count * mul), start);
   spawnAtms(houses, Math.round(PROPS.atm.count * mul));
 
   // Los tachos no: son chicos y se rompen enseguida.
@@ -142,7 +143,7 @@ function spawnTrashCans(data, count) {
  * calle: si la celda de arriba o la de abajo ya no es calle, la calle corre horizontal; si es la
  * de un costado, vertical. Las esquinas (las dos cosas) se saltean.
  */
-function spawnParkedCars(data, count) {
+function spawnParkedCars(data, count, start) {
   const road = new Set();
   const cells = [];
   for (const r of data.roads || []) {
@@ -160,7 +161,10 @@ function spawnParkedCars(data, count) {
     if (edgeV === edgeH) continue;
     curb.push(edgeV ? snapCar(c.x, c.y, true) : snapCar(c.x, c.y, false));
   }
-  const spots = pickSpread(shuffled(curb), count, PROPS.parkedCar.spacing);
+  // Ninguno cerca del punto de partida: los reclutas los rompen solos y la explosión los mata.
+  const safe2 = SPAWN_SAFETY.carStartRadius * SPAWN_SAFETY.carStartRadius;
+  const away = start ? curb.filter((c) => (c.x - start.x) ** 2 + (c.y - start.y) ** 2 >= safe2) : curb;
+  const spots = pickSpread(shuffled(away), count, PROPS.parkedCar.spacing);
   for (const s of spots) ParkedCar.spawn(s);
 }
 
@@ -182,5 +186,6 @@ function spawnAtms(houses, count) {
   // Más cajeros que casas: algunas casas tienen dos.
   const spots = [];
   while (spots.length < count && houses.length > 0) spots.push(...shuffled(houses).slice(0, count - spots.length));
-  for (const h of spots) Atm.spawn({ x: h.x + (rng() - 0.5) * 120, y: h.y + 24 });
+  // Pegado a la base de la casa, en las celdas que la casa ya bloquea: no ocupa la vereda.
+  for (const h of spots) Atm.spawn({ x: h.x + (rng() - 0.5) * 120, y: h.y + 14 });
 }

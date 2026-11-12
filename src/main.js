@@ -15,6 +15,8 @@ import { showResults } from './ui/screens/results.js';
 import { loadProfile, newProfile, saveProfile, applyRunResult } from './meta/profile.js';
 import { modifiersFromProfile, richGhostsBonus, UNLOCKS } from './meta/marketCatalog.js';
 import { WEAPON } from './game/config/weapons.js';
+import { WORLD } from './game/config/balance.js';
+import { prepareCity, clearCity } from './game/world/generatedCity.js';
 
 const RUN_SCENE_URL = new URL('./game/runScene.js', import.meta.url).href;
 
@@ -24,6 +26,7 @@ const RUN_SCENE_URL = new URL('./game/runScene.js', import.meta.url).href;
  */
 export async function boot(WEED, { dev }) {
   const uiRoot = document.getElementById('ui-root');
+  if (dev) discardHotReloadRestore();
   // preventContextMenu: el click derecho es una orden (foco), no el menú del navegador.
   const game = new WEED.GameEngine({ debug: dev, hotReload: dev, preventContextMenu: true });
   window.game = game;
@@ -76,6 +79,11 @@ async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
   };
 
   showLoading(uiRoot);
+  // Cada capítulo, una ciudad nueva (GDD: mapa generado al azar). La escena la toma al construirse.
+  const seed = devSeed(dev) ?? ((Math.random() * 0x7fffffff) | 0);
+  if (dev && new URLSearchParams(location.search).get('map') === 'littlecity') clearCity();
+  else prepareCity(seed, WORLD.width, WORLD.height);
+  if (dev) console.log(`[Chaos] capítulo ${profile.chapter}, ciudad semilla ${seed}`);
   await game.loadScene(RUN_SCENE_URL, { data });
   hideLoading();
   WEED.Time.scale = 1;
@@ -101,11 +109,30 @@ async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
 }
 
 /**
+ * El hot reload del engine, cuando cambia un archivo que no es de la escena (main.js, la UI, un
+ * asset), guarda la run, recarga la página y restaura esa run en la próxima carga de la escena.
+ * Acá la página arranca en el menú, así que esa "próxima carga" es el capítulo siguiente: se
+ * restauraba la run vieja (terminada, sin reclutas) en lugar de empezar una nueva, y sin la
+ * ciudad generada (vive en URLs blob: que se pierden al recargar). Se descarta al arrancar.
+ * La clave es interna del engine (src/core/debug/hotReload.js): si cambia, esto deja de hacer
+ * efecto y vuelve el problema.
+ */
+function discardHotReloadRestore() {
+  try {
+    sessionStorage.removeItem('weed.hotReload');
+  } catch {
+    // sin sessionStorage no hay restauración pendiente
+  }
+}
+
+/**
  * En dev, para probar sin jugar mil capítulos:
  *   ?money=N         suma N al perfil al entrar
  *   ?found=all       todo encontrado (se pueden comprar todos los desbloqueos)
  *   ?recruits=N      arranca cada capítulo con N reclutas
  *   ?weapon=bat|pistol|shotgun|smg   los reclutas sin arma del loadout arrancan con esa
+ *   ?seed=N          siempre la misma ciudad generada (la semilla de cada capítulo sale en la consola)
+ *   ?map=littlecity  el mapa viejo de littleCity en vez de una ciudad generada
  */
 function applyDevProfile(profile, dev) {
   if (!dev) return;
@@ -114,6 +141,13 @@ function applyDevProfile(profile, dev) {
   if (Number.isFinite(money) && money > 0) profile.money += money;
   if (q.get('found') === 'all') for (const u of UNLOCKS) profile.found[u.key] = true;
   saveProfile(profile);
+}
+
+/** ?seed=N repite siempre la misma ciudad (dev). */
+function devSeed(dev) {
+  if (!dev) return null;
+  const n = Number(new URLSearchParams(location.search).get('seed'));
+  return Number.isFinite(n) && n > 0 ? n | 0 : null;
 }
 
 function devRunOverrides(dev) {

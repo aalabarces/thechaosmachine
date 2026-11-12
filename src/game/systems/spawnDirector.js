@@ -3,9 +3,11 @@
 //   - Policía: más estrellas y un malón más fuerte = más patrulleros, mejor armados. Aparecen
 //     fuera de cámara y cazan al malón; sin heat, los que quedaron lejos se retiran.
 //   - Pandillas: zonas fijas por run, lejos del punto de partida; cada zona mantiene su gente
-//     (más si el malón es fuerte) y repone miembros cuando la zona está fuera de cámara.
+//     (más si el malón es fuerte) y repone miembros en puntos que no se ven.
+// Durante la run nada aparece en pantalla: cada punto de aparición se mide contra lo que muestra
+// la cámara (más un margen). Al empezar, además, nada cerca del punto de partida (SPAWN_SAFETY).
 
-import { HEAT, DIRECTOR, POLICE, GANG } from '../config/balance.js';
+import { HEAT, DIRECTOR, POLICE, GANG, SPAWN_SAFETY, WORLD } from '../config/balance.js';
 import { FACTION } from '../config/factions.js';
 import { WEAPON, WEAPONS } from '../config/weapons.js';
 import { RunState } from './runState.js';
@@ -16,7 +18,18 @@ import { Gang } from '../entities/Gang.js';
 import { WeaponHolder } from '../components/WeaponHolder.js';
 import { Brain } from '../components/Brain.js';
 
-const { Transform, rng } = WEED;
+const { Transform, Camera, rng } = WEED;
+
+/**
+ * ¿(x, y) queda fuera de lo que muestra la cámara, con un margen? (página)
+ * Medio ancho/alto de la vista en px de mundo = tamaño del canvas / (2 · zoom).
+ */
+export function isOffscreen(x, y, margin = SPAWN_SAFETY.offscreenMargin) {
+  const zoom = Camera.zoom || 1;
+  const hw = (Camera.canvasWidth || WORLD.width) / (2 * zoom) + margin;
+  const hh = (Camera.canvasHeight || WORLD.height) / (2 * zoom) + margin;
+  return Math.abs(x - Camera.centerX) > hw || Math.abs(y - Camera.centerY) > hh;
+}
 
 /** Estrellas (0..5) para una cantidad de heat. */
 export function heatStars(heat) {
@@ -38,10 +51,15 @@ export class SpawnDirector {
 
   // ---------------------------------------------------------------- inicio de la run
 
-  /** Elige las zonas de pandilla y las llena. Solo en partida nueva. */
+  /**
+   * Elige las zonas de pandilla y las llena. Solo en partida nueva. Ningún miembro aparece a menos
+   * de SPAWN_SAFETY.startRadius del punto de partida, y la correa de la zona (GANG.leashRadius) no
+   * llega hasta ahí: nadie te ataca apenas empieza el capítulo.
+   */
   setupGangZones(startX, startY) {
     this.zones = [];
-    const minStart2 = GANG.zoneMinDistanceFromStart * GANG.zoneMinDistanceFromStart;
+    const minStart = Math.max(GANG.zoneMinDistanceFromStart, GANG.zoneRadius + SPAWN_SAFETY.startRadius, GANG.leashRadius + SPAWN_SAFETY.startRadius * 0.5);
+    const minStart2 = minStart * minStart;
     const spacing2 = GANG.zoneMinSpacing * GANG.zoneMinSpacing;
     for (let tries = 0; tries < 400 && this.zones.length < GANG.zones; tries++) {
       const c = this.cells[(rng() * this.cells.length) | 0];
@@ -51,8 +69,10 @@ export class SpawnDirector {
       this.zones.push({ x: c.x, y: c.y, faction });
     }
     const members = this._gangMembersWanted(1);
+    const safe = SPAWN_SAFETY.startRadius;
+    const awayFromStart = (x, y) => dist2(x, y, startX, startY) >= safe * safe;
     for (let z = 0; z < this.zones.length; z++) {
-      for (let k = 0; k < members; k++) this._spawnGangMember(z);
+      for (let k = 0; k < members; k++) this._spawnGangMember(z, awayFromStart);
     }
   }
 
@@ -147,23 +167,21 @@ export class SpawnDirector {
       if (z >= 0 && z < counts.length) counts[z]++;
     }
     const wanted = this._gangMembersWanted(strength);
-    const offscreen2 = DIRECTOR.spawnMinDistance * DIRECTOR.spawnMinDistance;
-    const cx = SquadState.centroid[0];
-    const cy = SquadState.centroid[1];
     for (let z = 0; z < this.zones.length; z++) {
       if (counts[z] >= wanted) continue;
-      // Solo se repone una zona que no se ve: nadie aparece de la nada frente al jugador.
-      if (dist2(this.zones[z].x, this.zones[z].y, cx, cy) < offscreen2) continue;
-      this._spawnGangMember(z);
+      // Cada miembro en un punto que no se ve: nadie aparece de la nada frente al jugador.
+      this._spawnGangMember(z, isOffscreen);
     }
   }
 
-  _spawnGangMember(z) {
+  /** @param {(x: number, y: number) => boolean} isSafe dónde puede aparecer (lejos del inicio / fuera de pantalla) */
+  _spawnGangMember(z, isSafe) {
     const zone = this.zones[z];
     const r2 = GANG.zoneRadius * GANG.zoneRadius;
-    for (let tries = 0; tries < 20; tries++) {
+    for (let tries = 0; tries < 30; tries++) {
       const c = this.cells[(rng() * this.cells.length) | 0];
       if (dist2(c.x, c.y, zone.x, zone.y) > r2) continue;
+      if (!isSafe(c.x, c.y)) continue;
       Gang.spawn({
         x: c.x + (rng() - 0.5) * 24,
         y: c.y + (rng() - 0.5) * 24,
@@ -177,14 +195,26 @@ export class SpawnDirector {
     }
   }
 
-  /** Una celda al azar entre spawnMinDistance y spawnMaxDistance de (cx, cy). */
+  /**
+   * Una celda al azar entre spawnMinDistance y spawnMaxDistance de (cx, cy) que no se vea en
+   * pantalla (con el zoom alejado, la distancia sola no alcanza).
+   */
   _offscreenCell(cx, cy) {
-    const min2 = DIRECTOR.spawnMinDistance * DIRECTOR.spawnMinDistance;
-    const max2 = DIRECTOR.spawnMaxDistance * DIRECTOR.spawnMaxDistance;
+    // Con la cámara alejada la pantalla cubre más que el anillo de spawnMin/MaxDistance: el anillo
+    // se agranda para que siempre quede una parte afuera.
+    const zoom = Camera.zoom || 1;
+    const hw = (Camera.canvasWidth || WORLD.width) / (2 * zoom) + SPAWN_SAFETY.offscreenMargin;
+    const hh = (Camera.canvasHeight || WORLD.height) / (2 * zoom) + SPAWN_SAFETY.offscreenMargin;
+    const minD = Math.max(DIRECTOR.spawnMinDistance, Math.min(hw, hh));
+    const maxD = Math.max(DIRECTOR.spawnMaxDistance, Math.sqrt(hw * hw + hh * hh) + DIRECTOR.spawnMaxDistance - DIRECTOR.spawnMinDistance);
+    const min2 = minD * minD;
+    const max2 = maxD * maxD;
     for (let tries = 0; tries < 60; tries++) {
       const c = this.cells[(rng() * this.cells.length) | 0];
       const d2 = dist2(c.x, c.y, cx, cy);
-      if (d2 >= min2 && d2 <= max2) return c;
+      if (d2 < min2 || d2 > max2) continue;
+      // El grupo de policías se reparte ±20 px alrededor de la celda: el margen lo cubre.
+      if (isOffscreen(c.x, c.y)) return c;
     }
     return null;
   }

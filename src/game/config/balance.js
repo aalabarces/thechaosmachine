@@ -175,6 +175,19 @@ export const HEAT = {
   stars: [8, 30, 65, 110, 170],
 };
 
+/**
+ * Al empezar, nada peligroso dentro del rango de acción del malón, alrededor del punto de partida (px):
+ *   startRadius     ni pandilleros ni minas (y la correa de las zonas de pandilla no llega).
+ *   carStartRadius  sin autos estacionados (los reclutas los rompen solos y explotan).
+ * Durante la run la regla es otra: nada aparece en pantalla (offscreenMargin).
+ */
+export const SPAWN_SAFETY = {
+  startRadius: 1100,
+  carStartRadius: 900,
+  /** Durante la run, policías y pandilleros aparecen al menos esto afuera del borde de la pantalla (px de mundo). */
+  offscreenMargin: 120,
+};
+
 /** El que decide cuántos enemigos hay y dónde aparecen (systems/spawnDirector.js, en la página). */
 export const DIRECTOR = {
   /** Policías que buscan al malón: por estrella + por punto de fuerza del malón. */
@@ -202,6 +215,8 @@ export const DIRECTOR = {
   enemyMoneyPerStrength: 0.03,
   /** Sin reclutas durante esto, se termina la run (ms). */
   runEndDelayMs: 1500,
+  /** Si al empezar no aparece ningún recluta en este tiempo, también se termina (ms). */
+  runStartGraceMs: 4000,
 };
 
 /**
@@ -237,7 +252,7 @@ export const MINES = {
   /** Las pisa quien pase a menos de esto (px). */
   triggerRadius: 16,
   /** No aparecen cerca del punto de partida (px). */
-  minDistanceFromStart: 800,
+  minDistanceFromStart: 1100, // ver SPAWN_SAFETY.startRadius
   minSpacing: 250,
   /** Tamaño en pantalla (px de ancho). */
   width: 18,
