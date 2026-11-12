@@ -333,6 +333,15 @@ export const INPUT = {
   dragIntervalMs: 120,
   /** Tiempo apretado antes de que empiece el arrastre (ms): un click corto es solo un click. */
   dragDelayMs: 150,
+  /**
+   * Toque largo (celular, también sirve con el mouse): mantener quieto el dedo sobre algo durante
+   * longPressMs lo marca como foco, igual que el click derecho. Si el dedo se mueve más de
+   * longPressSlop px de pantalla, es un arrastre y no cuenta.
+   */
+  longPressMs: 450,
+  longPressSlop: 14,
+  /** Vibración al marcar el foco con toque largo (ms; 0 = sin vibrar). */
+  longPressVibrateMs: 30,
 };
 
 export const PERSON_ANIM = {

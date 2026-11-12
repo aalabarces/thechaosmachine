@@ -183,6 +183,10 @@ export class RunScene extends Scene {
     // Estado del input (solo página): cuándo empezó el apretón y cuándo se movió el destino por última vez.
     this._pressAt = 0;
     this._lastDragAt = 0;
+    // Toque largo: dónde empezó el apretón y si todavía puede convertirse en foco.
+    this._pressX = 0;
+    this._pressY = 0;
+    this._longPressArmed = false;
     // Sin foco al empezar (el estado compartido arranca en 0, que es un índice válido).
     clearSquadFocus();
     // Zoom al que se quiere llegar; el de la cámara se le acerca de a poco (handleZoomInput).
@@ -304,7 +308,10 @@ export class RunScene extends Scene {
    * Con dos dedos no se mueve: es pellizco de zoom.
    */
   handleMoveInput() {
-    if (Mouse.count > 1) return;
+    if (Mouse.count > 1) {
+      this._longPressArmed = false; // dos dedos: pellizco, no toque largo
+      return;
+    }
     const now = performance.now();
     if (Mouse.isButton0Pressed) {
       // Un toque sobre un bar con reclutas cerca compra un recluta en vez de mover al malón.
@@ -316,10 +323,18 @@ export class RunScene extends Scene {
       }
       this._pressAt = now;
       this._lastDragAt = now;
+      this._pressX = Mouse.x;
+      this._pressY = Mouse.y;
+      this._longPressArmed = true;
       this.orderMove(Mouse.x, Mouse.y);
       return;
     }
-    if (!Mouse.isButton0Down || now - this._pressAt < INPUT.dragDelayMs) return;
+    if (!Mouse.isButton0Down) {
+      this._longPressArmed = false;
+      return;
+    }
+    if (this.handleLongPress(now)) return;
+    if (now - this._pressAt < INPUT.dragDelayMs) return;
     if (now - this._lastDragAt < INPUT.dragIntervalMs) return;
     const dx = Mouse.x - SquadState.target[0];
     const dy = Mouse.y - SquadState.target[1];
@@ -329,9 +344,9 @@ export class RunScene extends Scene {
   }
 
   /**
-   * Click derecho: sobre un drop, el malón va a juntarlo; sobre alguien o algo golpeable, van todos
-   * a pegarle. Las órdenes del jugador mandan sobre lo que estuvieran haciendo (ver Recruit.tick).
-   * Sobre nada, es una orden de moverse como el click izquierdo.
+   * Click derecho (o toque largo, ver handleLongPress): sobre un drop, el malón va a juntarlo; sobre
+   * alguien o algo golpeable, van todos a pegarle. Las órdenes del jugador mandan sobre lo que
+   * estuvieran haciendo (ver Recruit.tick). Sobre nada, es una orden de moverse como el click izquierdo.
    */
   handleFocusInput() {
     if (!Mouse.isButton2Pressed) return;
@@ -340,6 +355,35 @@ export class RunScene extends Scene {
       this.orderMove(Mouse.x, Mouse.y);
       return;
     }
+    this.focusOn(hit);
+  }
+
+  /**
+   * Toque largo = foco (para el celular, que no tiene click derecho). Mientras el dedo siga quieto,
+   * a los longPressMs marca lo que haya donde empezó el toque. Si se movió, es un arrastre.
+   * @returns {boolean} true si el toque largo marcó un foco (ese apretón ya no arrastra)
+   */
+  handleLongPress(now) {
+    if (!this._longPressArmed) return false;
+    const slop = INPUT.longPressSlop / (Camera.zoom || 1); // px de pantalla → px de mundo
+    const dx = Mouse.x - this._pressX;
+    const dy = Mouse.y - this._pressY;
+    if (dx * dx + dy * dy > slop * slop) {
+      this._longPressArmed = false;
+      return false;
+    }
+    if (now - this._pressAt < INPUT.longPressMs) return false;
+    this._longPressArmed = false;
+    const hit = pickAt(this._pressX, this._pressY);
+    if (!hit) return false;
+    this.focusOn(hit);
+    this._pressAt = Infinity; // el resto de este apretón no mueve el destino
+    if (INPUT.longPressVibrateMs > 0) navigator.vibrate?.(INPUT.longPressVibrateMs);
+    return true;
+  }
+
+  /** Marca el foco del malón en lo que eligió el jugador (click derecho o toque largo). */
+  focusOn(hit) {
     const i = hit.index;
     const x = Transform.x[i];
     const y = Transform.y[i];
