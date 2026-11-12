@@ -1,6 +1,6 @@
 // Órdenes del malón, compartidas entre la página y los workers.
-// Único escritor: RunScene.update (página), al recibir un click/touch.
-// Lectores: cada Recruit en su tick.
+// Único escritor: RunScene.update (página): el destino al recibir un click/touch, y el centro
+// del malón cada frame. Lectores: cada Recruit (destino) y la policía (a quién cazar).
 
 const { SharedResource } = WEED;
 
@@ -13,6 +13,11 @@ export const SQUAD_STATE_SCHEMA = {
   hasTarget: { type: Uint8Array, length: 1 },
   /** Sube con cada destino nuevo: los reclutas recalculan su puesto en la formación cuando cambia. */
   orderId: { type: Uint32Array, length: 1 },
+  /** Centro de los reclutas vivos [x, y]: la policía lo caza. */
+  centroid: { type: Float32Array, length: 2 },
+  /** Reclutas vivos y "fuerza" del malón (cantidad + calidad de armas), para escalar la dificultad. */
+  alive: { type: Int32Array, length: 1 },
+  strength: { type: Float32Array, length: 1 },
 };
 
 export function setSquadTarget(x, y) {

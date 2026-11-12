@@ -20,6 +20,7 @@ export const CIVILIAN_VARIANTS = 15;
 
 export const SHEETS = {
   recruit: sheetNames('rojito', 3),
+  police: ['police_01'], // demos/img/poli.png: tiene pose de disparo con arma
   gangYellow: sheetNames('amarillo', 3),
   gangGreen: sheetNames('verde', 3),
   civilian: [...sheetNames('male', CIVILIAN_VARIANTS), ...sheetNames('female', CIVILIAN_VARIANTS)],
@@ -36,6 +37,8 @@ LPC_ANIMATIONS.push('hurt', 'climb');
 export const ROLE_ANIMATIONS = {
   recruit: ['idle', 'walk', 'run', 'slash', 'hurt'],
   civilian: ['idle', 'walk', 'run', 'hurt'],
+  police: ['idle', 'walk', 'run', 'slash', 'shoot', 'hurt'],
+  gang: ['idle', 'walk', 'run', 'slash', 'hurt'],
 };
 
 /** Lista de animaciones a NO cargar para un rol (formato `excludeAnimations` del engine). */

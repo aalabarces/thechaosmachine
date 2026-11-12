@@ -2,7 +2,7 @@
 // Portado de CityPerson (demo littleCity), con la FSM del GDD: pasear → huir → pasear.
 
 import { Person } from './Person.js';
-import { CIVILIAN } from '../config/balance.js';
+import { CIVILIAN, HEAT } from '../config/balance.js';
 import { FACTION, isHostile } from '../config/factions.js';
 import { SHEETS } from '../config/sprites.js';
 import { Faction } from '../components/Faction.js';
@@ -142,7 +142,11 @@ export class Civilian extends Person {
   }
 
   onDeath() {
-    RunState.civiliansKilled.add(1);
+    // Solo cuentan (y traen a la policía) los que mató el malón, no los del fuego cruzado.
+    if (this.killedByPlayer()) {
+      RunState.civiliansKilled.add(1);
+      RunState.heat.add(HEAT.civilianKill);
+    }
     this.spreadPanic(this.x, this.y);
   }
 }

@@ -21,7 +21,18 @@ function hostile(a, b) {
 
 hostile(FACTION.PLAYER, FACTION.CIVILIAN);
 hostile(FACTION.PLAYER, FACTION.PROP);
-// Fase 5: policía y pandillas contra el malón y entre ellas.
+// El malón contra todos los enemigos, y todos los enemigos contra el malón.
+for (const enemy of [FACTION.POLICE, FACTION.GANG_YELLOW, FACTION.GANG_GREEN]) {
+  hostile(FACTION.PLAYER, enemy);
+  hostile(enemy, FACTION.PLAYER);
+}
+// Policía y pandillas se pelean entre ellas: llevar a la policía a una zona de pandilla las enfrenta.
+hostile(FACTION.POLICE, FACTION.GANG_YELLOW);
+hostile(FACTION.POLICE, FACTION.GANG_GREEN);
+hostile(FACTION.GANG_YELLOW, FACTION.POLICE);
+hostile(FACTION.GANG_GREEN, FACTION.POLICE);
+hostile(FACTION.GANG_YELLOW, FACTION.GANG_GREEN);
+hostile(FACTION.GANG_GREEN, FACTION.GANG_YELLOW);
 
 /** ¿`attacker` le pega a `victim` si lo ve? */
 export function isHostile(attacker, victim) {
@@ -34,3 +45,10 @@ export function isHostile(attacker, victim) {
  */
 export const TARGET_DISTANCE_WEIGHT = new Float32Array(COUNT).fill(1);
 TARGET_DISTANCE_WEIGHT[FACTION.PROP] = 4;
+// Los reclutas prefieren a quien les dispara antes que a un civil que pasa.
+TARGET_DISTANCE_WEIGHT[FACTION.CIVILIAN] = 1.5;
+
+/** ¿Es un bando enemigo (policía o pandilla)? */
+export function isEnemyFaction(f) {
+  return f === FACTION.POLICE || f === FACTION.GANG_YELLOW || f === FACTION.GANG_GREEN;
+}

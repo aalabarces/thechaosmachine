@@ -2,21 +2,26 @@
 // no importa el engine, usa el global WEED.
 //
 // create()        siempre (partida nueva o restore de hot reload): mundo estático.
-// createNewGame() solo partida nueva: el malón inicial y los civiles.
-// update()        cada frame, en la página: input → órdenes, cámara, reponer civiles.
+// createNewGame() solo partida nueva: el malón inicial, los civiles y las zonas de pandilla.
+// update()        cada frame, en la página: input → órdenes, cámara, civiles, enemigos, fin de la run.
+//
+// Cuando no quedan reclutas, llama a scene.onRunEnded(resumen) (lo asigna main.js).
 
 import { asset, pad2 } from './assets.js';
-import { WORLD, CAMERA, SQUAD, INPUT, NAV, CIVILIAN } from './config/balance.js';
+import { WORLD, CAMERA, SQUAD, INPUT, NAV, CIVILIAN, POLICE, GANG, DIRECTOR } from './config/balance.js';
 import { SHEETS, ROLE_ANIMATIONS, excludedAnimations, HOUSE_COUNT, TREE_COUNT } from './config/sprites.js';
 import { SOUND_FILES } from './config/sounds.js';
 import { Recruit } from './entities/Recruit.js';
 import { Civilian } from './entities/Civilian.js';
+import { Police } from './entities/Police.js';
+import { Gang } from './entities/Gang.js';
 import { Corpse } from './entities/Corpse.js';
 import { Drop } from './entities/Drop.js';
 import { MoveMarker } from './entities/MoveMarker.js';
 import { CivilianSpawner } from './systems/civilianSpawner.js';
+import { SpawnDirector } from './systems/spawnDirector.js';
 import { CAR_SHEETS, WRECK_SHEET, CAR_ANGLES } from './entities/props/ParkedCar.js';
-import { WEAPON } from './config/weapons.js';
+import { WEAPON, WEAPONS } from './config/weapons.js';
 import { CITY_ENTITIES, loadCityData, spawnCity, nearestSidewalk } from './world/cityMap.js';
 import { SquadState, SQUAD_STATE_SCHEMA, setSquadTarget, squadCentroid } from './systems/squadState.js';
 import { RunState, RUN_STATE_SCHEMA } from './systems/runState.js';
@@ -111,6 +116,8 @@ export class RunScene extends Scene {
     spritesheets: {
       ...personSheets(SHEETS.recruit, ROLE_ANIMATIONS.recruit),
       ...personSheets(SHEETS.civilian, ROLE_ANIMATIONS.civilian),
+      ...personSheets(SHEETS.police, ROLE_ANIMATIONS.police),
+      ...personSheets([...SHEETS.gangYellow, ...SHEETS.gangGreen], ROLE_ANIMATIONS.gang),
       ...carSheets(),
     },
     tilemaps: {
@@ -134,6 +141,8 @@ export class RunScene extends Scene {
   static entities = [
     [Recruit, SQUAD.maxRecruits],
     [Civilian, CIVILIAN.poolSize],
+    [Police, POLICE.poolSize],
+    [Gang, GANG.poolSize],
     [Corpse, 300],
     [Drop, 400],
     [MoveMarker, 8],
@@ -153,12 +162,22 @@ export class RunScene extends Scene {
     // Zoom al que se quiere llegar; el de la cámara se le acerca de a poco (handleZoomInput).
     this._zoomGoal = CAMERA.startZoom;
     this.civilians = new CivilianSpawner(this.cityData.sidewalks || []);
+    this.director = new SpawnDirector(this.cityData.sidewalks || []);
     this._focusX = WORLD.width / 2;
     this._focusY = WORLD.height / 2;
+    // Fin de la run: hubo reclutas, ya no hay, y pasó un ratito (runEndDelayMs).
+    this._chapter = 1;
+    this._startedAt = performance.now();
+    this._seenRecruits = false;
+    this._emptySince = 0;
+    this._ended = false;
+    /** @type {((summary: object) => void) | null} lo asigna main.js */
+    this.onRunEnded = null;
   }
 
-  /** @param {{ startRecruits?: number, startWeapon?: number }} data lo que manda main.js (más adelante: perfil y loadout) */
-  createNewGame({ startRecruits = 1, startWeapon = WEAPON.FISTS } = {}) {
+  /** @param {{ chapter?: number, startRecruits?: number, startWeapon?: number }} data lo que manda main.js (más adelante: perfil y loadout) */
+  createNewGame({ chapter = 1, startRecruits = 1, startWeapon = WEAPON.FISTS } = {}) {
+    this._chapter = chapter;
     const spawn = nearestSidewalk(this.cityData, WORLD.width / 2, WORLD.height / 2);
     const count = clamp(startRecruits | 0, 1, SQUAD.maxRecruits);
     for (let k = 0; k < count; k++) {
@@ -170,13 +189,48 @@ export class RunScene extends Scene {
     setSquadTarget(spawn.x, spawn.y);
     Camera.centerOn(spawn.x, spawn.y);
     this.civilians.populate(spawn.x, spawn.y);
+    this.director.setupGangZones(spawn.x, spawn.y);
   }
 
   update(dtRatio, simMs) {
-    this.handleMoveInput();
+    const now = performance.now();
+    if (!this._ended) this.handleMoveInput();
     this.handleZoomInput(simMs);
     this.followSquad();
-    this.civilians.update(performance.now(), this._focusX, this._focusY);
+    this.civilians.update(now, this._focusX, this._focusY);
+    this.director.update(now, simMs);
+    this.checkRunEnd(now);
+  }
+
+  /** Sin reclutas vivos se termina el capítulo. */
+  checkRunEnd(now) {
+    if (this._ended) return;
+    if (Recruit.activeCount > 0) {
+      this._seenRecruits = true;
+      this._emptySince = 0;
+      return;
+    }
+    if (!this._seenRecruits) return;
+    if (this._emptySince === 0) this._emptySince = now;
+    if (now - this._emptySince < DIRECTOR.runEndDelayMs) return;
+    this._ended = true;
+    this.onRunEnded?.(this.runSummary(now));
+  }
+
+  /** Lo que se llevó el capítulo (para la pantalla de resultados y, en la fase 6, el perfil). */
+  runSummary(now = performance.now()) {
+    const weaponsFound = [];
+    for (let w = 1; w < WEAPONS.length; w++) if (RunState.weaponsFound[w]) weaponsFound.push(w);
+    return {
+      chapter: this._chapter,
+      money: RunState.money.load(),
+      civiliansKilled: RunState.civiliansKilled.load(),
+      enemiesKilled: RunState.enemiesKilled.load(),
+      recruitsLost: RunState.recruitsLost.load(),
+      weaponsFound,
+      armorFound: RunState.armorsFound.load() > 0,
+      durationMs: now - this._startedAt,
+    };
   }
 
   /**
@@ -235,9 +289,13 @@ export class RunScene extends Scene {
     Camera.centerOn(cx, cy);
   }
 
-  /** La cámara sigue al centro del malón. */
+  /** La cámara sigue al centro del malón, y lo publica para la policía (SquadState.centroid). */
   followSquad() {
-    if (squadCentroid(Recruit, Transform, _centroid) === 0) return;
+    const alive = squadCentroid(Recruit, Transform, _centroid);
+    SquadState.alive[0] = alive;
+    if (alive === 0) return;
+    SquadState.centroid[0] = _centroid.x;
+    SquadState.centroid[1] = _centroid.y;
     this._focusX = _centroid.x;
     this._focusY = _centroid.y;
     Camera.follow(_centroid.x, _centroid.y, CAMERA.followSmoothing);

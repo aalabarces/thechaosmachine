@@ -17,4 +17,13 @@ export const RUN_STATE_SCHEMA = {
   weaponsFound: { type: Uint8Array, length: 8 },
   /** Chalecos juntados en esta run (desbloqueo del chaleco en el mercado). */
   armorsFound: { type: Int32Array, mailbox: true },
+  /** Policías y pandilleros que mató el malón. */
+  enemiesKilled: { type: Int32Array, mailbox: true },
+  /** Reclutas muertos en esta run. */
+  recruitsLost: { type: Int32Array, mailbox: true },
+  /**
+   * Heat policial: lo suben los workers al matar civiles, romper cosas o matar policías, y lo
+   * baja la página con el tiempo (SpawnDirector). Las estrellas salen de HEAT.stars.
+   */
+  heat: { type: Int32Array, mailbox: true },
 };

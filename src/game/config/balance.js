@@ -36,6 +36,8 @@ export const RECRUIT = {
   pickupRadius: 16,
   /** Si en este tiempo no llegó a juntar el drop que fue a buscar (trabado), lo abandona (ms). */
   lootGiveUpMs: 3500,
+  /** Probabilidad de gritar al recibir un golpe o un balazo. */
+  painSoundChance: 0.5,
   /** Variación individual de la velocidad máxima (± fracción). */
   speedJitter: 0.06,
 };
@@ -90,6 +92,106 @@ export const COMBAT = {
   tracerMs: 70,
   /** Un disparo asusta a los civiles a esta distancia del que dispara (px; limitado por su visualRange). */
   gunshotPanicRadius: 300,
+};
+
+/** Enemigos: lo común a policía y pandillas. */
+export const ENEMY = {
+  /** Con menos de esta fracción de vida, huye (GDD). */
+  fleeHpFraction: 0.1,
+  fleeSpeed: 240,
+  /** Huyendo, si no hay nadie del malón a esta distancia, se escapa (desaparece). */
+  escapeDistance: 900,
+  separationRadius: 26,
+  separationForce: 600,
+};
+
+export const POLICE = {
+  hp: 60,
+  maxSpeed: 205,
+  responsiveness: 7,
+  violenceRange: 170,
+  shootRangeFraction: 0.8,
+  colliderRadius: 11,
+  linearDamping: 0.5,
+  scaleMin: 0.8,
+  scaleSpan: 0.1,
+  /**
+   * Cazan el centro del malón redondeado a esta grilla (px): así todos comparten el mismo
+   * flowfield y no se pide uno nuevo cada vez que el malón cruza una celda de 48.
+   */
+  huntGrid: 192,
+  poolSize: 60,
+};
+
+export const GANG = {
+  hp: 45,
+  maxSpeed: 195,
+  responsiveness: 7,
+  violenceRange: 150,
+  shootRangeFraction: 0.8,
+  colliderRadius: 11,
+  linearDamping: 0.5,
+  scaleMin: 0.8,
+  scaleSpan: 0.12,
+  /** Zonas de pandilla por mapa, su radio y cuánto se alejan de ella para pelear (px). */
+  zones: 4,
+  zoneRadius: 600,
+  leashRadius: 850,
+  /** Las zonas aparecen lejos del punto de partida y lejos entre sí (px). */
+  zoneMinDistanceFromStart: 1500,
+  zoneMinSpacing: 1700,
+  /** Patrullando: cada cuánto eligen otro punto de la zona (ms) y a qué distancia como máximo (px). */
+  wanderEveryMs: 6000,
+  wanderRadius: 350,
+  wanderSpeedFraction: 0.45,
+  /** Miembros por zona: base + por cada punto de fuerza del malón, con tope. */
+  membersBase: 6,
+  membersPerStrength: 0.12,
+  membersMax: 14,
+  /** Armas al aparecer: probabilidad de cada una (el resto, piñas). */
+  weaponChances: { bat: 0.35, pistol: 0.3, shotgun: 0.05 },
+  poolSize: 80,
+};
+
+/**
+ * Heat policial (GDD: matar civiles y romper cosas trae a la policía).
+ * Puntos por acción; se descuentan solos con el tiempo; las estrellas son umbrales de puntos.
+ */
+export const HEAT = {
+  civilianKill: 4,
+  propBreak: 1,
+  policeKill: 8,
+  decayPerSecond: 0.6,
+  max: 220,
+  /** Puntos para 1, 2, 3, 4 y 5 estrellas. */
+  stars: [8, 30, 65, 110, 170],
+};
+
+/** El que decide cuántos enemigos hay y dónde aparecen (systems/spawnDirector.js, en la página). */
+export const DIRECTOR = {
+  /** Policías que buscan al malón: por estrella + por punto de fuerza del malón. */
+  policePerStar: 3,
+  policePerStrength: 0.15,
+  /** Cada cuánto aparece un patrullero (ms), dividido por las estrellas. */
+  policeIntervalMs: 5000,
+  /** De a cuántos aparecen. */
+  policeGroup: 2,
+  /** Armas de la policía por estrellas: desde cuántas estrellas y con qué probabilidad. */
+  policeShotgunFromStars: 3,
+  policeShotgunChance: 0.3,
+  policeSmgFromStars: 4,
+  policeSmgChance: 0.3,
+  /** Aparecen fuera de la pantalla, entre estas distancias del centro del malón (px). */
+  spawnMinDistance: 900,
+  spawnMaxDistance: 1500,
+  /** Sin heat, la policía que quedó lejos de esto se retira (px). */
+  policeDespawnDistance: 1800,
+  /** Pandillas: cada cuánto se repone un miembro en una zona que está fuera de cámara (ms). */
+  gangRefillMs: 2500,
+  /** La fuerza del malón: 1 por recluta + esto por cada punto de rank de su arma. */
+  strengthPerWeaponRank: 0.5,
+  /** Sin reclutas durante esto, se termina la run (ms). */
+  runEndDelayMs: 1500,
 };
 
 /** Cosas rompibles. hp = cuánto aguantan; lootTable en config/lootTables.js. */

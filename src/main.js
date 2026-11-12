@@ -3,6 +3,7 @@
 
 import { createHud } from './ui/hud.js';
 import { createToasts, showToast } from './ui/toasts.js';
+import { showResults } from './ui/results.js';
 import { showLoading, hideLoading } from './ui/loading.js';
 import { WEAPON } from './game/config/weapons.js';
 
@@ -26,14 +27,16 @@ export async function boot(WEED, { dev }) {
 
   createHud(uiRoot, { dev });
   createToasts(uiRoot);
-  listenToRun(game.currentScene);
+  listenToRun(game.currentScene, uiRoot);
 }
 
 /** Eventos raros que mandan las entidades de la run (emit). */
-function listenToRun(scene) {
+function listenToRun(scene, uiRoot) {
   // Primera vez en la run que el malón junta cada arma: la desbloquea para el mercado (fase 6).
   scene.on('weaponFound', (data) => showToast(`¡Encontraste: ${data.name.toUpperCase()}!`));
   scene.on('armorFound', () => showToast('¡Encontraste: CHALECO!'));
+  // Sin reclutas: fin del capítulo.
+  scene.onRunEnded = (summary) => showResults(uiRoot, summary);
 }
 
 /**

@@ -15,5 +15,9 @@ export class Brain extends Component {
     homeX: Float32Array, // un punto conocido de vereda: vuelve ahí si se perdió del flowfield
     homeY: Float32Array,
     ignoreDrop: Int32Array, // drop que abandonó por no poder llegar: no lo vuelve a reservar
+    lastAttacker: Int32Array, // índice del último que le pegó (-1 = nadie): para contar quién mató a quién
+    goalX: Float32Array, // a dónde va cuando no pelea (patrulla de las pandillas)
+    goalY: Float32Array,
+    zone: Int8Array, // zona de pandilla (-1 = ninguna)
   };
 }

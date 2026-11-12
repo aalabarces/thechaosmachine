@@ -24,10 +24,12 @@ src/
     assets.js       URLs de assets relativas al módulo
     config/         números de balance y tablas (solo datos): balance, weapons, lootTables, factions, sprites, sounds
     components/     componentes (typed arrays compartidos): Health, Faction, Loot, PersonStats, Brain, DropData, WeaponHolder
-    ai/             FSM por rol (WEED.FSM): recruitFSM (atacar > lootear > seguir), civilianFSM (pasear ↔ huir)
-    entities/       Person → Recruit / Civilian / Enemy; Corpse, Drop, MoveMarker;
+    ai/             FSM por rol (WEED.FSM): recruitFSM (atacar > lootear > seguir), civilianFSM (pasear ↔ huir),
+                    enemyFSM (rondar → atacar → huir)
+    entities/       Person → Recruit / Civilian / Enemy (→ Police / Gang); Corpse, Drop, MoveMarker;
                     props/: House, Tree (escenografía) y Prop → TrashCan / ParkedCar / Atm (rompibles)
-    systems/        estado compartido (SquadState, RunState), spawners, loot y efectos
+    systems/        estado compartido (SquadState, RunState), SpawnDirector (heat, policía, pandillas),
+                    spawner de civiles, loot y efectos
     world/          el mapa (littleCity por ahora; generador procedural más adelante)
 ```
 

@@ -7,8 +7,10 @@
 //
 // Cada recluta decide solo: que otros hayan llegado no cambia nada para el que viene atrás.
 
-import { Person, closestPoint } from './Person.js';
+import { Person } from './Person.js';
 import { RECRUIT, SQUAD, NAV } from '../config/balance.js';
+import { isEnemyFaction } from '../config/factions.js';
+import { Faction } from '../components/Faction.js';
 import { FACTION } from '../config/factions.js';
 import { WEAPONS, ARMOR } from '../config/weapons.js';
 import { SHEETS } from '../config/sprites.js';
@@ -25,7 +27,6 @@ import { RunState } from '../systems/runState.js';
 const { NavGrid, Transform, rng } = WEED;
 
 const GOLDEN_ANGLE = 2.399963229728653; // espiral de girasol: puestos repartidos parejo
-const _nav = { x: 0, y: 0 };
 const _free = { x: 0, y: 0 };
 
 export class Recruit extends Person {
@@ -83,48 +84,22 @@ export class Recruit extends Person {
 
   /** Va a su puesto: flowfield de lejos, derecho de cerca, quieto si no hay orden. */
   followSquad() {
+    const speed = PersonStats.maxSpeed[this.index];
     if (!SquadState.hasTarget[0]) {
       this.brake(RECRUIT.responsiveness);
       return;
     }
-    const gx = this._goalX;
-    const gy = this._goalY;
-    if (this._isNear(gx, gy) || this._isNear(this.slotX, this.slotY)) {
+    const near = SQUAD.directRadius;
+    if (this.isNear(this._goalX, this._goalY, near) || this.isNear(this.slotX, this.slotY, near)) {
       this._goToSlot();
-    } else if (!this._followFlowfield(gx, gy)) {
-      // Sin dirección del flowfield. Si es porque está parado en una celda bloqueada (pegado a
-      // un árbol o a una casa: el engine bloquea toda celda que toque la caja del obstáculo),
-      // primero sale a la celda libre más cercana; ir derecho al puesto lo dejaría trabado ahí.
-      // Si no, el flowfield todavía se está calculando: va derecho mientras tanto.
-      if (!NavGrid.isPositionWalkable(this.x, this.y) && nearestWalkable(this.x, this.y, NAV.escapeRings, _free)) {
-        this.steerTo(_free.x, _free.y, PersonStats.maxSpeed[this.index], 1, 0, RECRUIT.responsiveness);
-      } else {
-        this._goToSlot();
-      }
+    } else if (!this.followFlowfield(this._goalX, this._goalY, speed, RECRUIT.responsiveness)) {
+      // Sin dirección: o está en una celda bloqueada (sale primero) o el flowfield se está calculando.
+      if (!this.escapeBlockedCell(speed, RECRUIT.responsiveness)) this._goToSlot();
     }
   }
 
   _goToSlot() {
     this.steerTo(this.slotX, this.slotY, PersonStats.maxSpeed[this.index], RECRUIT.arriveRadius, RECRUIT.stopRadius, RECRUIT.responsiveness);
-  }
-
-  _isNear(x, y) {
-    const dx = x - this.x;
-    const dy = y - this.y;
-    return dx * dx + dy * dy < SQUAD.directRadius * SQUAD.directRadius;
-  }
-
-  /**
-   * Un flowfield por celda destino, compartido por todo el malón (se calcula en el worker de navegación).
-   * @returns {boolean} false si todavía no está listo o no da dirección.
-   */
-  _followFlowfield(tx, ty) {
-    NavGrid.requestVector(this.x, this.y, tx, ty, _nav);
-    const len2 = _nav.x * _nav.x + _nav.y * _nav.y;
-    if (len2 < 0.01) return false;
-    const s = PersonStats.maxSpeed[this.index] / Math.sqrt(len2);
-    this.steerVelocity(_nav.x * s, _nav.y * s, RECRUIT.responsiveness);
-    return true;
   }
 
   /** Puesto = destino + offset en espiral según el orden del recluta entre los vivos. */
@@ -164,35 +139,20 @@ export class Recruit extends Person {
     return dx * dx + dy * dy <= RECRUIT.leashRadius * RECRUIT.leashRadius;
   }
 
-  /**
-   * Pelea con `t`: con piñas o palo se le acerca y le pega; con un arma de fuego se planta a
-   * distancia de tiro y dispara, y si una casa o un árbol tapa el tiro se sigue acercando.
-   */
-  fight(t) {
+  // ---------------------------------------------------------------- recibir daño
+
+  /** Grita a veces; si le dispara un enemigo, va por él (aunque no lo tenga en su rango de vista). */
+  onHurt(fromX, fromY, from) {
     const i = this.index;
-    const range = PersonStats.attackRange[i];
-    const tx = Transform.x[t];
-    const ty = Transform.y[t];
-    const dx = tx - this.x;
-    const dy = ty - this.y;
-    const d2 = dx * dx + dy * dy;
-    if (this.hasGun()) {
-      const shootRange = range * RECRUIT.shootRangeFraction;
-      if (d2 <= shootRange * shootRange && this.tryShoot(t) !== -1) {
-        this.brake(RECRUIT.responsiveness);
-        return;
-      }
-      this.steerTo(tx, ty, PersonStats.maxSpeed[i], 40, 20, RECRUIT.responsiveness);
-      return;
-    }
-    // Cuerpo a cuerpo: se mide de borde a borde y se va al punto más cercano del blanco,
-    // así varios rodean un auto en vez de amontonarse contra su centro.
-    if (this.gapTo(t) > range) {
-      this.steerTo(closestPoint.x, closestPoint.y, PersonStats.maxSpeed[i], 30, 0, RECRUIT.responsiveness);
-    } else {
-      this.brake(RECRUIT.responsiveness);
-      this.tryMelee(t);
-    }
+    if (rng() < RECRUIT.painSoundChance) this.playPain(0.5);
+    if (from < 0 || !isEnemyFaction(Faction.id[from]) || !this.isValidTarget(from)) return;
+    if (RecruitFSM.state[i] === RecruitFSM.states.ATTACK.stateIndex || !this.isInLeash(from)) return;
+    Brain.target[i] = from;
+    this.recruitFSM.changeState(RecruitFSM.states.ATTACK);
+  }
+
+  onDeath() {
+    RunState.recruitsLost.add(1);
   }
 
   // ---------------------------------------------------------------- lootear

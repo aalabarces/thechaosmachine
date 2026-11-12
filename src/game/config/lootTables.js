@@ -31,6 +31,14 @@ export const LOOT_TABLES = {
       { kind: ITEM.ARMOR, chance: 0.15 },
     ],
   },
+  police: {
+    money: [10, 35],
+    items: [{ kind: ITEM.ARMOR, chance: 0.2 }],
+  },
+  gang: {
+    money: [20, 70],
+    items: [{ kind: ITEM.WEAPON, weapon: WEAPON.BAT, chance: 0.15 }],
+  },
   atm: {
     money: [120, 300],
     items: [{ kind: ITEM.WEAPON, weapon: WEAPON.SMG, chance: 0.12 }],

@@ -70,3 +70,77 @@ body {
   80% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* Heat policial: estrellas junto al resto del HUD. */
+.hud-heat {
+  color: #555;
+  letter-spacing: 2px;
+}
+
+.hud-heat .on {
+  color: #ff4040;
+}
+
+/* Fin de capítulo. */
+.results {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  pointer-events: auto;
+  animation: results-in 0.6s ease-out;
+}
+
+.results-card {
+  min-width: min(360px, 86vw);
+  padding: 24px 28px;
+  border: 3px solid #d63030;
+  background: #111;
+  text-align: center;
+}
+
+.results-title {
+  font-size: 34px;
+  font-weight: bold;
+  color: #ff4040;
+  letter-spacing: 4px;
+}
+
+.results-sub {
+  margin: 4px 0 16px;
+  color: #aaa;
+  font-size: 14px;
+}
+
+.results-stats {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 18px;
+  margin: 0 0 20px;
+  text-align: left;
+}
+
+.results-stats dt {
+  color: #aaa;
+}
+
+.results-stats dd {
+  margin: 0;
+  font-weight: bold;
+  text-align: right;
+}
+
+.results-button {
+  font: bold 18px 'Courier New', monospace;
+  padding: 10px 22px;
+  border: 0;
+  background: #d63030;
+  color: #fff;
+  cursor: pointer;
+}
+
+@keyframes results-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

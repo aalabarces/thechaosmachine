@@ -3,8 +3,9 @@
 // chatarra (sigue sirviendo de cobertura) o desaparece, según la subclase.
 // El malón los ataca solos si no hay personas cerca (FACTION.PROP).
 
-import { PROPS } from '../../config/balance.js';
+import { PROPS, HEAT } from '../../config/balance.js';
 import { FACTION } from '../../config/factions.js';
+import { RunState } from '../../systems/runState.js';
 import { Health } from '../../components/Health.js';
 import { Faction } from '../../components/Faction.js';
 import { Loot } from '../../components/Loot.js';
@@ -40,10 +41,11 @@ export class Prop extends GameObject {
   }
 
   onMessage(name, from, a, b, c) {
-    if (name === 'hit') this.takeHit(a, b, c);
+    if (name === 'hit') this.takeHit(a, from);
   }
 
-  takeHit(damage) {
+  /** @param {number} from quién pegó (para saber si fue el malón y sumar heat) */
+  takeHit(damage, from = -1) {
     const i = this.index;
     if (Health.hp[i] <= 0) return;
     Health.hp[i] -= damage;
@@ -51,7 +53,10 @@ export class Prop extends GameObject {
     emitDebris(this.x, this.y, PROPS.debrisPerHit, C.debrisTint);
     this.onHitEffect();
     SoundManager.play(C.hitSounds[(rng() * C.hitSounds.length) | 0], 0.5, 0.9, 1.1, 0, 0, this.x, this.y);
-    if (Health.hp[i] <= 0) this.breakApart();
+    if (Health.hp[i] <= 0) {
+      if (from >= 0 && Faction.id[from] === FACTION.PLAYER) RunState.heat.add(HEAT.propBreak);
+      this.breakApart();
+    }
   }
 
   /** Efecto extra al recibir un golpe (vidrios del auto, chispas del cajero…). */

@@ -3,7 +3,7 @@
 // buscar hostiles, pegar o disparar con el arma que lleve, recibir daño (el chaleco absorbe
 // parte), morir (cadáver + sangre) y soltar lo que llevaba: plata, el arma y su tabla de loot.
 
-import { PERSON_ANIM, COMBAT } from '../config/balance.js';
+import { PERSON_ANIM, COMBAT, NAV, SQUAD } from '../config/balance.js';
 import { FACTION, isHostile, TARGET_DISTANCE_WEIGHT } from '../config/factions.js';
 import { WEAPONS, WEAPON, ARMOR } from '../config/weapons.js';
 import { PAIN_SOUNDS } from '../config/sounds.js';
@@ -17,8 +17,9 @@ import { Corpse } from './Corpse.js';
 import { Drop, DROP_KIND, weaponLook } from './Drop.js';
 import { emitBlood, emitTracer, emitMuzzle, emitSparks } from '../systems/effects.js';
 import { dropLoot } from '../systems/loot.js';
+import { nearestWalkable } from '../world/navUtils.js';
 
-const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, SoundManager, Ray, Decoration, rng } = WEED;
+const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, SoundManager, Ray, Decoration, NavGrid, rng } = WEED;
 
 const DIR_NAMES = ['up', 'left', 'down', 'right'];
 const DIR_UP = 0;
@@ -27,6 +28,9 @@ const DIR_DOWN = 2;
 const DIR_RIGHT = 3;
 
 const SLASH = ['slash_up', 'slash_left', 'slash_down', 'slash_right'];
+const SHOOT = ['shoot_up', 'shoot_left', 'shoot_down', 'shoot_right'];
+const SHOOT_ANIM_SPEED = 0.25;
+const SHOOT_ANIM_MS = 200;
 const IDLE = ['idle_up', 'idle_left', 'idle_down', 'idle_right'];
 
 /** Dónde se dibuja el arma en la mano según hacia dónde mira: [x, y, espejado, delante]. */
@@ -40,6 +44,8 @@ const HAND = [
 const SHOT_MAX_HITS = 8;
 const _hits = [];
 const _shot = { x: 0, y: 0 };
+const _nav = { x: 0, y: 0 };
+const _free = { x: 0, y: 0 };
 
 /** Punto del blanco más cercano a quien lo mide (lo deja Person.gapTo). */
 export const closestPoint = { x: 0, y: 0 };
@@ -63,6 +69,8 @@ export class Person extends GameObject {
   static lootTable = null;
   /** visualRange mínimo de la clase; con un arma de fuego se agranda a su alcance. */
   static baseVisualRange = 100;
+  /** ¿Su hoja tiene una pose de disparo con arma (shoot_*)? La de la policía sí. */
+  static shootAnimation = false;
 
   /** Dirección a la que mira (DIR_*) y animación actual: 'idle' | 'walk' | 'run' | 'action'. */
   _facing = DIR_DOWN;
@@ -107,6 +115,7 @@ export class Person extends GameObject {
     Brain.threatX[i] = x;
     Brain.threatY[i] = y;
     Brain.calmMs[i] = 0;
+    Brain.lastAttacker[i] = -1;
     WeaponHolder.armor[i] = 0;
     WeaponHolder.decoIndex[i] = -1;
 
@@ -184,6 +193,49 @@ export class Person extends GameObject {
   brake(responsiveness) {
     const i = this.index;
     this.addAcceleration(-RigidBody.vx[i] * responsiveness, -RigidBody.vy[i] * responsiveness);
+  }
+
+  /**
+   * Va hacia (gx, gy) rodeando obstáculos: de cerca derecho; de lejos por el flowfield del destino
+   * (compartido por todos los que van a la misma celda). Si está parado en una celda bloqueada
+   * (pegado a un árbol, una casa o un auto: el engine bloquea toda celda que toque su caja), primero
+   * sale a la celda libre más cercana; ir derecho lo dejaría trabado ahí. Mientras el flowfield se
+   * calcula, va derecho.
+   * @returns {boolean} true si ya está cerca (a menos de SQUAD.directRadius)
+   */
+  navigateTo(gx, gy, speed, responsiveness, arriveRadius = 60, stopRadius = 10) {
+    if (this.isNear(gx, gy, SQUAD.directRadius)) {
+      this.steerTo(gx, gy, speed, arriveRadius, stopRadius, responsiveness);
+      return true;
+    }
+    if (!this.followFlowfield(gx, gy, speed, responsiveness) && !this.escapeBlockedCell(speed, responsiveness)) {
+      this.steerTo(gx, gy, speed, arriveRadius, stopRadius, responsiveness);
+    }
+    return false;
+  }
+
+  isNear(x, y, radius) {
+    const dx = x - this.x;
+    const dy = y - this.y;
+    return dx * dx + dy * dy < radius * radius;
+  }
+
+  /** Sigue el flowfield hacia la celda de (tx, ty). @returns {boolean} false si no está listo o no da dirección */
+  followFlowfield(tx, ty, speed, responsiveness) {
+    NavGrid.requestVector(this.x, this.y, tx, ty, _nav);
+    const len2 = _nav.x * _nav.x + _nav.y * _nav.y;
+    if (len2 < 0.01) return false;
+    const s = speed / Math.sqrt(len2);
+    this.steerVelocity(_nav.x * s, _nav.y * s, responsiveness);
+    return true;
+  }
+
+  /** Si está en una celda bloqueada, va a la libre más cercana. @returns {boolean} si lo hizo */
+  escapeBlockedCell(speed, responsiveness) {
+    if (NavGrid.isPositionWalkable(this.x, this.y)) return false;
+    if (!nearestWalkable(this.x, this.y, NAV.escapeRings, _free)) return false;
+    this.steerTo(_free.x, _free.y, speed, 1, 0, responsiveness);
+    return true;
   }
 
   /** Recorta la velocidad a `maxSpeed`. */
@@ -378,6 +430,59 @@ export class Person extends GameObject {
     return Math.sqrt(dx * dx + dy * dy) - r - myR;
   }
 
+  /**
+   * ¿Ve a `t`? Falso si una casa, un árbol o chatarra (algo sólido sin vida) tapa la línea.
+   * Las personas en el medio no tapan.
+   */
+  canSee(t) {
+    const dx = Transform.x[t] - this.x;
+    const dy = Transform.y[t] - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return true;
+    const first = this._firstHit(this.x, this.y, dx / dist, dy / dist, dist);
+    return first < 0 || first === t || Health.maxHp[first] > 0;
+  }
+
+  /**
+   * Pelea con `t`: con piñas o palo se le acerca y le pega; con un arma de fuego se planta a
+   * distancia de tiro y dispara, y si algo sólido tapa el tiro se sigue acercando.
+   * Usa stats.responsiveness y stats.shootRangeFraction de la clase.
+   */
+  fight(t) {
+    const i = this.index;
+    const s = this.constructor.stats;
+    const range = PersonStats.attackRange[i];
+    const tx = Transform.x[t];
+    const ty = Transform.y[t];
+    const dx = tx - this.x;
+    const dy = ty - this.y;
+    const d2 = dx * dx + dy * dy;
+    if (this.hasGun()) {
+      const shootRange = range * s.shootRangeFraction;
+      if (d2 <= shootRange * shootRange && this.tryShoot(t) !== -1) {
+        this.brake(s.responsiveness);
+        return;
+      }
+      this.navigateTo(tx, ty, PersonStats.maxSpeed[i], s.responsiveness, 40, 20);
+      return;
+    }
+    // Cuerpo a cuerpo: se mide de borde a borde y se va al punto más cercano del blanco,
+    // así varios rodean un auto en vez de amontonarse contra su centro.
+    if (this.gapTo(t) > range) {
+      if (d2 > SQUAD.directRadius * SQUAD.directRadius) this.navigateTo(tx, ty, PersonStats.maxSpeed[i], s.responsiveness);
+      else this.steerTo(closestPoint.x, closestPoint.y, PersonStats.maxSpeed[i], 30, 0, s.responsiveness);
+    } else {
+      this.brake(s.responsiveness);
+      this.tryMelee(t);
+    }
+  }
+
+  /** ¿Lo último que le pegó fue del malón? (para contar muertes y heat) */
+  killedByPlayer() {
+    const a = Brain.lastAttacker[this.index];
+    return a >= 0 && Faction.id[a] === FACTION.PLAYER;
+  }
+
   /** ¿El arma que lleva es de fuego? */
   hasGun() {
     return WEAPONS[WeaponHolder.weapon[this.index]].ranged;
@@ -442,6 +547,12 @@ export class Person extends GameObject {
       emitTracer(sx, sy, _shot.x, _shot.y);
     }
     emitMuzzle(sx, sy, dx, dy);
+    if (this.constructor.shootAnimation) {
+      this._anim = 'action';
+      this.setAnimation(SHOOT[this._facing], false);
+      this.setAnimationSpeed(SHOOT_ANIM_SPEED);
+      Brain.actionMs[i] = SHOOT_ANIM_MS;
+    }
     SoundManager.play(w.sound, w.soundVolume, w.soundRate * 0.95, w.soundRate * 1.05, 0, 0, sx, sy);
     if ((this._shots++ & 3) === 0) this._alarmCivilians();
     return 1;
@@ -493,6 +604,7 @@ export class Person extends GameObject {
   takeHit(damage, fromX, fromY, from) {
     const i = this.index;
     if (Health.hp[i] <= 0) return;
+    if (from >= 0) Brain.lastAttacker[i] = from;
     const armor = WeaponHolder.armor[i];
     if (armor > 0) {
       const absorbed = Math.min(armor, damage * ARMOR.absorb);
