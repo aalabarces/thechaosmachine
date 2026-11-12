@@ -23,9 +23,10 @@ src/
     runScene.js     la escena de una run (= un capítulo)
     assets.js       URLs de assets relativas al módulo
     config/         números de balance y tablas (solo datos)
-    components/     componentes (typed arrays compartidos)
-    entities/       Person → Recruit / Civilian / Enemy; props/ (House, Tree, …)
-    systems/        estado compartido (SquadState, RunState) y directores
+    components/     componentes (typed arrays compartidos): Health, Faction, Loot, PersonStats, Brain, DropData
+    ai/             FSM por rol (WEED.FSM): recruitFSM (atacar > lootear > seguir), civilianFSM (pasear ↔ huir)
+    entities/       Person → Recruit / Civilian / Enemy; Corpse, Drop, MoveMarker; props/ (House, Tree, …)
+    systems/        estado compartido (SquadState, RunState), spawners y efectos
     world/          el mapa (littleCity por ahora; generador procedural más adelante)
 ```
 

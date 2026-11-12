@@ -8,4 +8,6 @@ export class RunState extends SharedResource {}
 export const RUN_STATE_SCHEMA = {
   /** Plata juntada en esta run. */
   money: { type: Int32Array, mailbox: true },
+  /** Civiles muertos en esta run (resultados del capítulo, heat policial en la fase 5). */
+  civiliansKilled: { type: Int32Array, mailbox: true },
 };

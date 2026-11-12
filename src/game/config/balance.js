@@ -18,6 +18,91 @@ export const RECRUIT = {
   colliderRadius: 11,
   scaleMin: 0.78,
   scaleSpan: 0.12,
+  /** Combate y looteo. */
+  hp: 100,
+  damage: 12,
+  /** Distancia entre centros a la que pega (px). */
+  attackRange: 24,
+  attackCooldownMs: 650,
+  /** Ve a un hostil a esta distancia y va a pegarle (px). */
+  violenceRange: 130,
+  /**
+   * Solo pelea o lootea cosas a menos de esto de su puesto en la formación (px). Mientras el
+   * malón va hacia un destino lejano, el puesto está allá: no se frenan a pelear en el camino.
+   */
+  leashRadius: 260,
+  /** Tiempo parado sobre un drop para juntarlo, con lootSpeed 1 (ms). */
+  lootTimeMs: 350,
+  lootSpeed: 1,
+  /** Junta un drop a esta distancia (px). */
+  pickupRadius: 16,
+  /** Variación individual de la velocidad máxima (± fracción). */
+  speedJitter: 0.06,
+};
+
+export const CIVILIAN = {
+  /** Cuántos hay en la ciudad a la vez (el spawner repone a los muertos fuera de cámara). */
+  population: 600,
+  poolSize: 700,
+  /** Cada cuánto el spawner repone uno (ms). */
+  respawnIntervalMs: 400,
+  /** No aparecen a menos de esto de un recluta (px). */
+  spawnMinDistance: 700,
+  colliderRadius: 10,
+  linearDamping: 2.2,
+  scaleMin: 0.7,
+  scaleSpan: 0.2,
+  hp: 30,
+  /** Plata que llevan encima (y sueltan al morir). */
+  moneyMin: 5,
+  moneyMax: 40,
+  /** Paseando: empuje sobre el flowfield de veredas (px/s²) y tope de velocidad. */
+  walkAccel: 220,
+  walkMaxSpeed: 110,
+  /** Variación individual del paseo (± fracción). */
+  walkJitter: 0.25,
+  /** Huyendo: velocidad deseada (menor que la del recluta, así se los alcanza). */
+  fleeSpeed: 195,
+  fleeResponsiveness: 6,
+  /** Ve a un hostil a esta distancia y sale corriendo (px). */
+  fearRadius: 170,
+  /** Al recibir un golpe, avisa a los civiles a esta distancia: también huyen (px). */
+  panicRadius: 220,
+  /** Sin ver peligro durante esto, vuelve a pasear (ms). */
+  calmDownMs: 3500,
+  /** Alcance con el que ve a sus vecinos (spatial hash). */
+  visualRange: 180,
+  separationRadius: 28,
+  separationForce: 400,
+  /** Probabilidad de gritar al recibir un golpe. */
+  painSoundChance: 0.6,
+};
+
+export const COMBAT = {
+  /** Empujón al recibir un golpe (px/s). */
+  knockback: 120,
+  /** Velocidad de la animación de golpe (cuadros por 1/60 s) y cuánto la protege de caminar (ms). */
+  punchAnimSpeed: 0.3,
+  punchAnimMs: 330,
+  bloodPerHit: 4,
+  bloodOnDeath: 14,
+};
+
+export const DROP = {
+  /** Se desvanece si nadie lo junta en este tiempo (ms). */
+  lifeMs: 45000,
+  fadeMs: 1500,
+  /** Tamaño en pantalla del billete (px). */
+  moneyWidth: 18,
+  /** Al caer se corre un poco al azar (px). */
+  scatter: 10,
+};
+
+export const CORPSE = {
+  lifeMs: 12000,
+  fadeMs: 2000,
+  /** Velocidad de la animación de caída. */
+  fallAnimSpeed: 0.16,
 };
 
 export const SQUAD = {
@@ -31,8 +116,8 @@ export const SQUAD = {
   separationRadius: 26,
   /** Aceleración máxima de ese empuje (px/s²). */
   separationForce: 700,
-  /** Alcance con el que cada recluta ve a sus vecinos (spatial hash), px. */
-  visualRange: 80,
+  /** Alcance con el que cada recluta ve a sus vecinos (spatial hash), px. Cubre RECRUIT.violenceRange. */
+  visualRange: 140,
 };
 
 export const NAV = {

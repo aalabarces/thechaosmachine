@@ -2,14 +2,19 @@
 // no importa el engine, usa el global WEED.
 //
 // create()        siempre (partida nueva o restore de hot reload): mundo estático.
-// createNewGame() solo partida nueva: el malón inicial.
-// update()        cada frame, en la página: input → órdenes, cámara.
+// createNewGame() solo partida nueva: el malón inicial y los civiles.
+// update()        cada frame, en la página: input → órdenes, cámara, reponer civiles.
 
 import { asset, pad2 } from './assets.js';
-import { WORLD, CAMERA, SQUAD, INPUT, NAV } from './config/balance.js';
-import { SHEETS, EXCLUDED_LPC_ANIMATIONS, HOUSE_COUNT, TREE_COUNT } from './config/sprites.js';
+import { WORLD, CAMERA, SQUAD, INPUT, NAV, CIVILIAN } from './config/balance.js';
+import { SHEETS, ROLE_ANIMATIONS, excludedAnimations, HOUSE_COUNT, TREE_COUNT } from './config/sprites.js';
+import { SOUND_FILES } from './config/sounds.js';
 import { Recruit } from './entities/Recruit.js';
+import { Civilian } from './entities/Civilian.js';
+import { Corpse } from './entities/Corpse.js';
+import { Drop } from './entities/Drop.js';
 import { MoveMarker } from './entities/MoveMarker.js';
+import { CivilianSpawner } from './systems/civilianSpawner.js';
 import { CITY_ENTITIES, loadCityData, spawnCity, nearestSidewalk } from './world/cityMap.js';
 import { SquadState, SQUAD_STATE_SCHEMA, setSquadTarget, squadCentroid } from './systems/squadState.js';
 import { RunState, RUN_STATE_SCHEMA } from './systems/runState.js';
@@ -22,15 +27,23 @@ function numberedTextures(prefix, folder, count) {
   return out;
 }
 
-function personSheets(names) {
+/** Hojas LPC de un rol, cargando solo las animaciones que usa (el atlas es uno solo y tiene tope). */
+function personSheets(names, keepAnimations) {
+  const exclude = excludedAnimations(keepAnimations);
   const out = {};
   for (const name of names) {
     out[name] = {
       json: asset('img/people/lpc_character.json'),
       png: asset(`img/people/${name}.png`),
-      excludeAnimations: EXCLUDED_LPC_ANIMATIONS,
+      excludeAnimations: exclude,
     };
   }
+  return out;
+}
+
+function soundFiles() {
+  const out = {};
+  for (const [name, file] of Object.entries(SOUND_FILES)) out[name] = asset(`audio/${file}`);
   return out;
 }
 
@@ -45,11 +58,14 @@ export class RunScene extends Scene {
     worldWidth: WORLD.width,
     worldHeight: WORLD.height,
     spatial: { cellSize: 128, maxNeighbors: 128 },
-    logic: { numberOfLogicWorkers: 1 },
+    // Civiles con tickInterval 2: staggeredUpdates reparte sus ticks entre frames pares e impares.
+    logic: { numberOfLogicWorkers: 1, staggeredUpdates: true },
     // El mapa crea ~1300 cuerpos estáticos de una vez: el anillo de comandos tiene que entrarlos.
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, commandRingCapacity: 16384 },
     renderer: { backend: 'webgl', ySort: true },
     lighting: { enabled: false },
+    // Sangre: partículas que caen y quedan como manchas en el piso (decals).
+    particle: { maxParticles: 6000, decals: true, decalsTileSize: 256, decalsResolution: 0.5 },
     navigation: { enabled: true, cellSize: NAV.cellSize },
     layers: {
       ground: { kind: LAYER_KIND.TILEMAP, tilemap: 'city', scale: 1, zIndex: 0.5 },
@@ -60,23 +76,39 @@ export class RunScene extends Scene {
     textures: {
       ...numberedTextures('house', 'houses', HOUSE_COUNT),
       ...numberedTextures('tree', 'trees', TREE_COUNT),
+      blood: asset('img/fx/blood.png'),
+      drop_money: asset('img/drops/money.png'),
     },
     spritesheets: {
-      ...personSheets(SHEETS.recruit),
+      ...personSheets(SHEETS.recruit, ROLE_ANIMATIONS.recruit),
+      ...personSheets(SHEETS.civilian, ROLE_ANIMATIONS.civilian),
     },
     tilemaps: {
       city: { json: asset('map/little_city_tilemap.json'), png: asset('map/tiles.png') },
     },
+    // Flowfield horneado de las veredas (el que siguen los civiles al pasear).
+    flowfields: {
+      sidewalks: asset('map/flowfield_sidewalks.json'),
+    },
   };
+
+  static audios = soundFiles();
 
   static sharedResources = [
     [SquadState, SQUAD_STATE_SCHEMA],
     [RunState, RUN_STATE_SCHEMA],
   ];
 
-  static messages = ['markerDone'];
+  static messages = ['markerDone', 'hit', 'panic', 'corpseGone', 'dropExpired'];
 
-  static entities = [[Recruit, SQUAD.maxRecruits], [MoveMarker, 8], ...CITY_ENTITIES];
+  static entities = [
+    [Recruit, SQUAD.maxRecruits],
+    [Civilian, CIVILIAN.poolSize],
+    [Corpse, 300],
+    [Drop, 400],
+    [MoveMarker, 8],
+    ...CITY_ENTITIES,
+  ];
 
   async preload() {
     this.cityData = await loadCityData();
@@ -90,6 +122,9 @@ export class RunScene extends Scene {
     this._lastDragAt = 0;
     // Zoom al que se quiere llegar; el de la cámara se le acerca de a poco (handleZoomInput).
     this._zoomGoal = CAMERA.startZoom;
+    this.civilians = new CivilianSpawner(this.cityData.sidewalks || []);
+    this._focusX = WORLD.width / 2;
+    this._focusY = WORLD.height / 2;
   }
 
   /** @param {{ startRecruits?: number }} data lo que manda main.js (más adelante: perfil y loadout) */
@@ -104,12 +139,14 @@ export class RunScene extends Scene {
     }
     setSquadTarget(spawn.x, spawn.y);
     Camera.centerOn(spawn.x, spawn.y);
+    this.civilians.populate(spawn.x, spawn.y);
   }
 
   update(dtRatio, simMs) {
     this.handleMoveInput();
     this.handleZoomInput(simMs);
     this.followSquad();
+    this.civilians.update(performance.now(), this._focusX, this._focusY);
   }
 
   /**
@@ -171,6 +208,8 @@ export class RunScene extends Scene {
   /** La cámara sigue al centro del malón. */
   followSquad() {
     if (squadCentroid(Recruit, Transform, _centroid) === 0) return;
+    this._focusX = _centroid.x;
+    this._focusY = _centroid.y;
     Camera.follow(_centroid.x, _centroid.y, CAMERA.followSmoothing);
   }
 }
