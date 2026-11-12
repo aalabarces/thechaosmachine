@@ -6,7 +6,6 @@
 
 import { RECRUIT } from '../config/balance.js';
 import { Brain } from '../components/Brain.js';
-import { PersonStats } from '../components/PersonStats.js';
 import { DropData } from '../components/DropData.js';
 import { Drop } from '../entities/Drop.js';
 
@@ -14,7 +13,7 @@ const { FSM, FSMState } = WEED;
 
 class FollowState extends FSMState {
   static onUpdate(owner, i) {
-    const t = owner.findHostile(PersonStats.violenceRange[i], owner.slotX, owner.slotY, RECRUIT.leashRadius);
+    const t = owner.findHostile(owner.sightRange(), owner.slotX, owner.slotY, RECRUIT.leashRadius);
     if (t >= 0) {
       Brain.target[i] = t;
       this.fsm.changeState(i, this.fsm.states.ATTACK);
@@ -29,7 +28,7 @@ class AttackState extends FSMState {
   static onUpdate(owner, i) {
     let t = Brain.target[i];
     if (!owner.isValidTarget(t) || !owner.isInLeash(t)) {
-      t = owner.findHostile(PersonStats.violenceRange[i], owner.slotX, owner.slotY, RECRUIT.leashRadius);
+      t = owner.findHostile(owner.sightRange(), owner.slotX, owner.slotY, RECRUIT.leashRadius);
       Brain.target[i] = t;
       if (t < 0) {
         this.fsm.changeState(i, this.fsm.states.FOLLOW);
@@ -50,15 +49,22 @@ class LootState extends FSMState {
     Brain.progressMs[i] = 0;
   }
 
-  static onUpdate(owner, i, dt) {
+  static onUpdate(owner, i, dt, timeMs) {
     const d = Brain.target[i];
     if (!Drop.isAvailable(d) || DropData.claimedBy[d] !== i || !owner.isInLeash(d)) {
       this.fsm.changeState(i, this.fsm.states.FOLLOW);
       owner.followSquad();
       return;
     }
+    // Trabado sin poder llegar (algo sólido en el medio): lo deja y no lo vuelve a buscar.
+    if (timeMs > RECRUIT.lootGiveUpMs) {
+      Brain.ignoreDrop[i] = d;
+      this.fsm.changeState(i, this.fsm.states.FOLLOW);
+      owner.followSquad();
+      return;
+    }
     // Pelear tiene prioridad sobre juntar: suelta el drop para que lo junte otro.
-    const t = owner.findHostile(PersonStats.violenceRange[i], owner.slotX, owner.slotY, RECRUIT.leashRadius);
+    const t = owner.findHostile(owner.sightRange(), owner.slotX, owner.slotY, RECRUIT.leashRadius);
     if (t >= 0) {
       DropData.claimedBy[d] = -1;
       Brain.target[i] = t;

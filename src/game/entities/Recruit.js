@@ -2,21 +2,25 @@
 // El malón: todos van al destino común (SquadState); cada uno ocupa un puesto en una espiral
 // alrededor de ese punto. Lejos, siguen el flowfield del destino (rodean manzanas); cerca, van
 // derecho a su puesto. Se separan entre sí para no apilarse.
-// La FSM (ai/recruitFSM.js) decide si pelea, lootea o sigue al malón.
+// La FSM (ai/recruitFSM.js) decide si pelea, lootea o sigue al malón. Pelea con lo que tenga
+// en la mano (piñas, palo o arma de fuego) y junta plata, armas mejores y chalecos.
 //
 // Cada recluta decide solo: que otros hayan llegado no cambia nada para el que viene atrás.
 
-import { Person } from './Person.js';
+import { Person, closestPoint } from './Person.js';
 import { RECRUIT, SQUAD, NAV } from '../config/balance.js';
 import { FACTION } from '../config/factions.js';
+import { WEAPONS, ARMOR } from '../config/weapons.js';
 import { SHEETS } from '../config/sprites.js';
 import { SquadState } from '../systems/squadState.js';
 import { nearestWalkable } from '../world/navUtils.js';
 import { PersonStats } from '../components/PersonStats.js';
 import { Brain } from '../components/Brain.js';
 import { DropData } from '../components/DropData.js';
+import { WeaponHolder } from '../components/WeaponHolder.js';
 import { RecruitFSM } from '../ai/recruitFSM.js';
-import { Drop } from './Drop.js';
+import { Drop, DROP_KIND } from './Drop.js';
+import { RunState } from '../systems/runState.js';
 
 const { NavGrid, Transform, rng } = WEED;
 
@@ -30,6 +34,7 @@ export class Recruit extends Person {
   static spritesheets = SHEETS.recruit;
   static stats = RECRUIT;
   static faction = FACTION.PLAYER;
+  static baseVisualRange = SQUAD.visualRange;
 
   /** ms que representa un tick (para timers). */
   msPerTick = 16.67;
@@ -44,13 +49,10 @@ export class Recruit extends Person {
   onSpawned(spawnConfig = {}) {
     super.onSpawned(spawnConfig);
     const i = this.index;
-    this.collider.visualRange = SQUAD.visualRange;
-
+    // Daño, alcance y cooldown salen del arma (Person.equipWeapon).
     PersonStats.maxSpeed[i] = RECRUIT.maxSpeed * (1 + (rng() * 2 - 1) * RECRUIT.speedJitter);
-    PersonStats.damage[i] = RECRUIT.damage;
-    PersonStats.attackRange[i] = RECRUIT.attackRange;
-    PersonStats.attackCooldownMs[i] = RECRUIT.attackCooldownMs;
     PersonStats.violenceRange[i] = RECRUIT.violenceRange;
+    Brain.ignoreDrop[i] = -1;
     PersonStats.lootSpeed[i] = RECRUIT.lootSpeed;
 
     // El pool reusa entidades: arrancar siempre siguiendo al malón.
@@ -162,7 +164,10 @@ export class Recruit extends Person {
     return dx * dx + dy * dy <= RECRUIT.leashRadius * RECRUIT.leashRadius;
   }
 
-  /** Se acerca a `t` y le pega cuando lo tiene a mano. */
+  /**
+   * Pelea con `t`: con piñas o palo se le acerca y le pega; con un arma de fuego se planta a
+   * distancia de tiro y dispara, y si una casa o un árbol tapa el tiro se sigue acercando.
+   */
   fight(t) {
     const i = this.index;
     const range = PersonStats.attackRange[i];
@@ -170,11 +175,23 @@ export class Recruit extends Person {
     const ty = Transform.y[t];
     const dx = tx - this.x;
     const dy = ty - this.y;
-    if (dx * dx + dy * dy > range * range) {
-      this.steerTo(tx, ty, PersonStats.maxSpeed[i], range, range * 0.6, RECRUIT.responsiveness);
+    const d2 = dx * dx + dy * dy;
+    if (this.hasGun()) {
+      const shootRange = range * RECRUIT.shootRangeFraction;
+      if (d2 <= shootRange * shootRange && this.tryShoot(t) !== -1) {
+        this.brake(RECRUIT.responsiveness);
+        return;
+      }
+      this.steerTo(tx, ty, PersonStats.maxSpeed[i], 40, 20, RECRUIT.responsiveness);
+      return;
+    }
+    // Cuerpo a cuerpo: se mide de borde a borde y se va al punto más cercano del blanco,
+    // así varios rodean un auto en vez de amontonarse contra su centro.
+    if (this.gapTo(t) > range) {
+      this.steerTo(closestPoint.x, closestPoint.y, PersonStats.maxSpeed[i], 30, 0, RECRUIT.responsiveness);
     } else {
       this.brake(RECRUIT.responsiveness);
-      this.tryPunch(t);
+      this.tryMelee(t);
     }
   }
 
@@ -195,7 +212,7 @@ export class Recruit extends Person {
     let bestD2 = PersonStats.violenceRange[i] * PersonStats.violenceRange[i];
     for (let k = 0; k < drops.length; k++) {
       const d = drops[k];
-      if (this._isClaimedByOther(d)) continue;
+      if (d === Brain.ignoreDrop[i] || !this._wants(d) || this._isClaimedByOther(d)) continue;
       const ox = Transform.x[d];
       const oy = Transform.y[d];
       const dx = ox - myX;
@@ -212,6 +229,19 @@ export class Recruit extends Person {
     DropData.claimedBy[best] = i;
     Brain.target[i] = best;
     return true;
+  }
+
+  /** Plata siempre; un arma solo si es mejor que la que tiene; un chaleco si no tiene el máximo. */
+  _wants(d) {
+    const kind = DropData.kind[d];
+    if (kind === DROP_KIND.MONEY) return true;
+    const i = this.index;
+    if (kind === DROP_KIND.WEAPON) {
+      const w = WEAPONS[DropData.amount[d]];
+      return w !== undefined && w.rank > WEAPONS[WeaponHolder.weapon[i]].rank;
+    }
+    if (kind === DROP_KIND.ARMOR) return WeaponHolder.armor[i] < ARMOR.max;
+    return false;
   }
 
   _isClaimedByOther(d) {
@@ -236,7 +266,34 @@ export class Recruit extends Person {
     this.brake(RECRUIT.responsiveness);
     Brain.progressMs[i] += ms * PersonStats.lootSpeed[i];
     if (Brain.progressMs[i] < RECRUIT.lootTimeMs) return false;
-    Drop.collect(d);
+    this._collect(d);
     return true;
+  }
+
+  /** Se queda con lo que había en el drop. */
+  _collect(d) {
+    const i = this.index;
+    const kind = DropData.kind[d];
+    const amount = DropData.amount[d];
+    const x = Transform.x[d];
+    const y = Transform.y[d];
+    Drop.despawn(d);
+    if (kind === DROP_KIND.MONEY) {
+      RunState.money.add(amount);
+    } else if (kind === DROP_KIND.WEAPON) {
+      // Equipa la mejor y deja la vieja en el piso para otro compañero.
+      const old = WeaponHolder.weapon[i];
+      if (WEAPONS[old].rank > 0) Drop.spawn({ x, y, kind: DROP_KIND.WEAPON, amount: old });
+      this.equipWeapon(amount);
+      if (RunState.weaponsFound[amount] === 0) {
+        RunState.weaponsFound[amount] = 1;
+        this.emit('weaponFound', { weapon: amount, name: WEAPONS[amount].name });
+      }
+    } else if (kind === DROP_KIND.ARMOR) {
+      this.addArmor(amount);
+      const before = RunState.armorsFound.load();
+      RunState.armorsFound.add(1);
+      if (before === 0) this.emit('armorFound', {});
+    }
   }
 }

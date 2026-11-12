@@ -1,21 +1,24 @@
 // Person: base de todo ser humano del juego (reclutas, civiles, enemigos).
 // Sabe moverse hacia un punto con "arrive" (frena al llegar), animarse en 4 direcciones,
-// buscar hostiles, pegar, recibir golpes, morir (cadáver + sangre) y soltar su plata.
-// La "Looteable" del GDD: Loot guarda lo que suelta.
+// buscar hostiles, pegar o disparar con el arma que lleve, recibir daño (el chaleco absorbe
+// parte), morir (cadáver + sangre) y soltar lo que llevaba: plata, el arma y su tabla de loot.
 
 import { PERSON_ANIM, COMBAT } from '../config/balance.js';
-import { FACTION, isHostile } from '../config/factions.js';
+import { FACTION, isHostile, TARGET_DISTANCE_WEIGHT } from '../config/factions.js';
+import { WEAPONS, WEAPON, ARMOR } from '../config/weapons.js';
 import { PAIN_SOUNDS } from '../config/sounds.js';
 import { Health } from '../components/Health.js';
 import { Faction } from '../components/Faction.js';
 import { Loot } from '../components/Loot.js';
 import { PersonStats } from '../components/PersonStats.js';
 import { Brain } from '../components/Brain.js';
+import { WeaponHolder } from '../components/WeaponHolder.js';
 import { Corpse } from './Corpse.js';
-import { Drop, DROP_KIND } from './Drop.js';
-import { emitBlood } from '../systems/effects.js';
+import { Drop, DROP_KIND, weaponLook } from './Drop.js';
+import { emitBlood, emitTracer, emitMuzzle, emitSparks } from '../systems/effects.js';
+import { dropLoot } from '../systems/loot.js';
 
-const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, SoundManager, rng } = WEED;
+const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, SoundManager, Ray, Decoration, rng } = WEED;
 
 const DIR_NAMES = ['up', 'left', 'down', 'right'];
 const DIR_UP = 0;
@@ -24,6 +27,22 @@ const DIR_DOWN = 2;
 const DIR_RIGHT = 3;
 
 const SLASH = ['slash_up', 'slash_left', 'slash_down', 'slash_right'];
+const IDLE = ['idle_up', 'idle_left', 'idle_down', 'idle_right'];
+
+/** Dónde se dibuja el arma en la mano según hacia dónde mira: [x, y, espejado, delante]. */
+const HAND = [
+  [5, -20, 1, -1], // arriba: detrás del cuerpo
+  [-6, -18, -1, 1],
+  [-5, -18, 1, 1],
+  [6, -18, 1, 1],
+];
+
+const SHOT_MAX_HITS = 8;
+const _hits = [];
+const _shot = { x: 0, y: 0 };
+
+/** Punto del blanco más cercano a quien lo mide (lo deja Person.gapTo). */
+export const closestPoint = { x: 0, y: 0 };
 
 function facingFromVelocity(vx, vy) {
   const ax = vx < 0 ? -vx : vx;
@@ -33,19 +52,25 @@ function facingFromVelocity(vx, vy) {
 }
 
 export class Person extends GameObject {
-  static components = [RigidBody, Collider, SpriteRenderer, Health, Faction, Loot, PersonStats, Brain];
+  static components = [RigidBody, Collider, SpriteRenderer, Health, Faction, Loot, PersonStats, Brain, WeaponHolder];
 
   /** Hojas LPC posibles para esta clase (las subclases la definen). */
   static spritesheets = [];
   /** Parámetros de balance; las subclases los pisan con su sección. */
   static stats = { colliderRadius: 10, linearDamping: 2, scaleMin: 0.75, scaleSpan: 0.15, hp: 10 };
   static faction = FACTION.NONE;
+  /** Tabla de config/lootTables.js que tira al morir (además de su plata y su arma). */
+  static lootTable = null;
+  /** visualRange mínimo de la clase; con un arma de fuego se agranda a su alcance. */
+  static baseVisualRange = 100;
 
   /** Dirección a la que mira (DIR_*) y animación actual: 'idle' | 'walk' | 'run' | 'action'. */
   _facing = DIR_DOWN;
   _anim = 'idle';
+  /** Cuenta de disparos (para no asustar civiles con cada bala de la ametralladora). */
+  _shots = 0;
 
-  onSpawned({ x = 0, y = 0, sheet } = {}) {
+  onSpawned({ x = 0, y = 0, sheet, weapon = WEAPON.FISTS } = {}) {
     this.x = x;
     this.y = y;
     const i = this.index;
@@ -66,6 +91,7 @@ export class Person extends GameObject {
 
     this.collider.shapeType = ShapeType.Circle;
     this.collider.radius = s.colliderRadius * scale;
+    this.collider.visualRange = C.baseVisualRange;
     this.rigidBody.linearDamping = s.linearDamping;
     this.setFixedRotation(1);
 
@@ -81,9 +107,17 @@ export class Person extends GameObject {
     Brain.threatX[i] = x;
     Brain.threatY[i] = y;
     Brain.calmMs[i] = 0;
+    WeaponHolder.armor[i] = 0;
+    WeaponHolder.decoIndex[i] = -1;
 
     this._facing = DIR_DOWN;
     this._anim = 'idle';
+    this._shots = 0;
+    this.equipWeapon(weapon);
+  }
+
+  onDespawned() {
+    this._removeWeaponDeco();
   }
 
   // ---------------------------------------------------------------- movimiento
@@ -186,7 +220,7 @@ export class Person extends GameObject {
     if (speed > PERSON_ANIM.walkSpeedThreshold) {
       const dir = facingFromVelocity(vx, vy);
       if (dir !== this._facing || this._anim !== moving) {
-        this._facing = dir;
+        this._setFacing(dir);
         this._anim = moving;
         this.setAnimation(`${moving}_${DIR_NAMES[dir]}`);
       }
@@ -196,44 +230,113 @@ export class Person extends GameObject {
       if (speed > 0 && speed < PERSON_ANIM.walkSpeedThreshold * 0.5) this.setVelocity(0, 0);
       if (this._anim !== 'idle') {
         this._anim = 'idle';
-        this.setAnimation(`idle_${DIR_NAMES[this._facing]}`);
+        this.setAnimation(IDLE[this._facing]);
         this.setAnimationSpeed(PERSON_ANIM.idleAnimSpeed);
       }
     }
   }
 
-  /** Mira hacia (x, y) sin moverse (para pegarle a alguien). */
+  /** Mira hacia (x, y) sin moverse (para pegarle o dispararle a alguien). */
   faceTowards(x, y) {
-    this._facing = facingFromVelocity(x - this.x, y - this.y);
+    const dir = facingFromVelocity(x - this.x, y - this.y);
+    if (dir === this._facing) return;
+    this._setFacing(dir);
+    if (this._anim === 'idle') this.setAnimation(IDLE[dir]);
+  }
+
+  _setFacing(dir) {
+    if (dir === this._facing) return;
+    this._facing = dir;
+    this._refreshWeaponDeco();
+  }
+
+  // ---------------------------------------------------------------- armas
+
+  /** Equipa `weapon` (WEAPON.*): copia sus números a PersonStats y le pone el arma en la mano. */
+  equipWeapon(weapon) {
+    const i = this.index;
+    const w = WEAPONS[weapon] ?? WEAPONS[WEAPON.FISTS];
+    WeaponHolder.weapon[i] = WEAPONS[weapon] ? weapon : WEAPON.FISTS;
+    PersonStats.damage[i] = w.damage;
+    PersonStats.attackRange[i] = w.range;
+    PersonStats.attackCooldownMs[i] = w.cooldownMs;
+    // Para ver blancos a la distancia de tiro, los vecinos tienen que llegar hasta ahí.
+    const base = this.constructor.baseVisualRange;
+    this.collider.visualRange = w.ranged && w.range > base ? w.range : base;
+    this._refreshWeaponDeco();
+  }
+
+  /** Rango de "violencia" efectivo: con un arma de fuego, ve hasta donde dispara. */
+  sightRange() {
+    const i = this.index;
+    const w = WEAPONS[WeaponHolder.weapon[i]];
+    const v = PersonStats.violenceRange[i];
+    return w.ranged && w.range > v ? w.range : v;
+  }
+
+  /** Suma chaleco hasta el tope. */
+  addArmor(points) {
+    const i = this.index;
+    WeaponHolder.armor[i] = Math.min(ARMOR.max, WeaponHolder.armor[i] + points);
+  }
+
+  _removeWeaponDeco() {
+    const i = this.index;
+    const d = WeaponHolder.decoIndex[i];
+    if (d >= 0) Decoration.despawn(d);
+    WeaponHolder.decoIndex[i] = -1;
+  }
+
+  _refreshWeaponDeco() {
+    this._removeWeaponDeco();
+    const look = weaponLook(WeaponHolder.weapon[this.index]);
+    if (!look) return;
+    const hand = HAND[this._facing];
+    const sx = (look.width / this._textureWidth(look.texture)) * hand[2];
+    const sy = look.width / this._textureWidth(look.texture);
+    WeaponHolder.decoIndex[this.index] = this.addDecoration(look.texture, hand[0], hand[1], sx, sy, hand[3], {
+      anchorX: 0.3,
+      anchorY: 0.5,
+    });
+  }
+
+  /** Ancho en px de las texturas de armas (para escalar la decoración al tamaño pedido). */
+  _textureWidth(texture) {
+    return TEXTURE_WIDTH[texture] ?? 32;
   }
 
   // ---------------------------------------------------------------- combate
 
   /**
-   * El hostil vivo más cercano entre los vecinos, a menos de `range` de mí y a menos de
-   * `leashRadius` de (anchorX, anchorY). -1 si no hay.
+   * El hostil vivo "más cercano" entre los vecinos, a menos de `range` de mí y a menos de
+   * `leashRadius` de (anchorX, anchorY). La distancia se pesa por bando (las personas antes que
+   * los props). -1 si no hay.
    */
   findHostile(range, anchorX, anchorY, leashRadius) {
     const myFaction = Faction.id[this.index];
     const myX = this.x;
     const myY = this.y;
     const leash2 = leashRadius * leashRadius;
+    const range2 = range * range;
     let best = -1;
-    let bestD2 = range * range;
+    let bestScore = Infinity;
     for (let n = 0; n < this.neighborCount; n++) {
       const ni = this.getNeighbor(n);
-      if (!Transform.active[ni] || Health.hp[ni] <= 0 || !isHostile(myFaction, Faction.id[ni])) continue;
+      const f = Faction.id[ni];
+      if (!Transform.active[ni] || Health.hp[ni] <= 0 || !isHostile(myFaction, f)) continue;
       const ox = Transform.x[ni];
       const oy = Transform.y[ni];
       const dx = ox - myX;
       const dy = oy - myY;
       const d2 = dx * dx + dy * dy;
-      if (d2 >= bestD2) continue;
+      if (d2 >= range2) continue;
+      const score = d2 * TARGET_DISTANCE_WEIGHT[f];
+      if (score >= bestScore) continue;
       const lx = ox - anchorX;
       const ly = oy - anchorY;
       if (lx * lx + ly * ly > leash2) continue;
       best = ni;
-      bestD2 = d2;
+      bestScore = score;
     }
     return best;
   }
@@ -243,13 +346,54 @@ export class Person extends GameObject {
     return t >= 0 && Transform.active[t] === 1 && Health.hp[t] > 0 && isHostile(Faction.id[this.index], Faction.id[t]);
   }
 
-  /** Un golpe cuerpo a cuerpo si se puede (cooldown listo). @returns {boolean} si pegó */
-  tryPunch(target) {
+  /**
+   * Distancia libre entre mi borde y el borde de `t` (0 o menos = se tocan). Sirve para pegarle
+   * igual a una persona que a un auto largo: medir de centro a centro dejaba a los que estaban
+   * contra el costado del auto "lejos" de su centro, empujando sin pegar nunca.
+   * Deja en closestPoint el punto de `t` más cercano, para ir hacia ahí.
+   */
+  gapTo(t) {
+    const myX = this.x;
+    const myY = this.y;
+    const myR = Collider.radius[this.index];
+    let px;
+    let py;
+    let r = 0;
+    if (Collider.shapeType[t] === ShapeType.Box) {
+      const cx = Transform.x[t] + Collider.offsetX[t];
+      const cy = Transform.y[t] + Collider.offsetY[t];
+      const hw = Collider.width[t] * 0.5;
+      const hh = Collider.height[t] * 0.5;
+      px = myX < cx - hw ? cx - hw : myX > cx + hw ? cx + hw : myX;
+      py = myY < cy - hh ? cy - hh : myY > cy + hh ? cy + hh : myY;
+    } else {
+      px = Transform.x[t];
+      py = Transform.y[t];
+      r = Collider.radius[t];
+    }
+    closestPoint.x = px;
+    closestPoint.y = py;
+    const dx = px - myX;
+    const dy = py - myY;
+    return Math.sqrt(dx * dx + dy * dy) - r - myR;
+  }
+
+  /** ¿El arma que lleva es de fuego? */
+  hasGun() {
+    return WEAPONS[WeaponHolder.weapon[this.index]].ranged;
+  }
+
+  /** Baja los cooldowns: llamarlo una vez por tick. */
+  coolDown(dtMs) {
+    const i = this.index;
+    if (Brain.cooldownMs[i] > 0) Brain.cooldownMs[i] -= dtMs;
+  }
+
+  /** Un golpe cuerpo a cuerpo (piñas o palo) si el cooldown está listo. @returns {boolean} si pegó */
+  tryMelee(target) {
     const i = this.index;
     if (Brain.cooldownMs[i] > 0) return false;
-    const tx = Transform.x[target];
-    const ty = Transform.y[target];
-    this.faceTowards(tx, ty);
+    this.faceTowards(Transform.x[target], Transform.y[target]);
     this._anim = 'action';
     this.setAnimation(SLASH[this._facing], false);
     this.setAnimationSpeed(COMBAT.punchAnimSpeed);
@@ -260,20 +404,101 @@ export class Person extends GameObject {
     return true;
   }
 
-  /** Baja los cooldowns: llamarlo una vez por tick. */
-  coolDown(dtMs) {
+  /**
+   * Dispara al blanco si el cooldown está listo y no hay una pared/árbol en el medio.
+   * @returns {number} 1 disparó, 0 esperando el cooldown, -1 tapado (hay que acercarse o rodear)
+   */
+  tryShoot(target) {
     const i = this.index;
-    if (Brain.cooldownMs[i] > 0) Brain.cooldownMs[i] -= dtMs;
+    const sx = this.x;
+    const sy = this.y;
+    const tx = Transform.x[target];
+    const ty = Transform.y[target];
+    let dx = tx - sx;
+    let dy = ty - sy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 0.001) return 0;
+    dx /= dist;
+    dy /= dist;
+
+    // ¿Algo sólido entre medio? Entonces no gasta el tiro.
+    const first = this._firstHit(sx, sy, dx, dy, dist);
+    if (first >= 0 && first !== target && Health.maxHp[first] <= 0) return -1;
+    this.faceTowards(tx, ty);
+    if (Brain.cooldownMs[i] > 0) return 0;
+
+    const w = WEAPONS[WeaponHolder.weapon[i]];
+    Brain.cooldownMs[i] = PersonStats.attackCooldownMs[i];
+    const baseAngle = Math.atan2(dy, dx);
+    for (let p = 0; p < w.pellets; p++) {
+      const a = baseAngle + (rng() * 2 - 1) * w.spread;
+      const ux = Math.cos(a);
+      const uy = Math.sin(a);
+      const hit = this._firstHit(sx, sy, ux, uy, w.range);
+      if (hit >= 0) {
+        if (Health.maxHp[hit] > 0) this.sendTo(hit, 'hit', PersonStats.damage[i], sx, sy);
+        else emitSparks(_shot.x, _shot.y);
+      }
+      emitTracer(sx, sy, _shot.x, _shot.y);
+    }
+    emitMuzzle(sx, sy, dx, dy);
+    SoundManager.play(w.sound, w.soundVolume, w.soundRate * 0.95, w.soundRate * 1.05, 0, 0, sx, sy);
+    if ((this._shots++ & 3) === 0) this._alarmCivilians();
+    return 1;
+  }
+
+  /**
+   * Lo primero que corta un disparo desde (sx, sy) en la dirección unitaria (ux, uy): ni yo ni mis
+   * compañeros de bando (los atraviesa). Deja el punto de impacto (o el final del alcance) en _shot.
+   * @returns {number} índice de la entidad, -1 si no pega en nada
+   */
+  _firstHit(sx, sy, ux, uy, range) {
+    const me = this.index;
+    const myFaction = Faction.id[me];
+    const ex = sx + ux * range;
+    const ey = sy + uy * range;
+    const hits = Ray.castAll(sx, sy, ex, ey, range, SHOT_MAX_HITS, 0xffffffff, _hits);
+    const n = hits.length;
+    for (let k = 0; k < n; k++) {
+      const h = hits[k];
+      const e = h.entityIndex;
+      if (e === me || e < 0 || Transform.active[e] !== 1) continue;
+      if (myFaction !== FACTION.NONE && Faction.id[e] === myFaction) continue;
+      _shot.x = h.hitX;
+      _shot.y = h.hitY;
+      return e;
+    }
+    _shot.x = ex;
+    _shot.y = ey;
+    return -1;
+  }
+
+  /** Un tiro asusta a los civiles cercanos: huyen del que disparó. */
+  _alarmCivilians() {
+    const r2 = COMBAT.gunshotPanicRadius * COMBAT.gunshotPanicRadius;
+    for (let n = 0; n < this.neighborCount; n++) {
+      const ni = this.getNeighbor(n);
+      if (!Transform.active[ni] || Faction.id[ni] !== FACTION.CIVILIAN || Health.hp[ni] <= 0) continue;
+      const dx = Transform.x[ni] - this.x;
+      const dy = Transform.y[ni] - this.y;
+      if (dx * dx + dy * dy < r2) this.sendTo(ni, 'panic', this.x, this.y);
+    }
   }
 
   onMessage(name, from, a, b, c) {
     if (name === 'hit') this.takeHit(a, b, c, from);
   }
 
-  /** Recibe `damage` desde (fromX, fromY). */
+  /** Recibe `damage` desde (fromX, fromY). El chaleco absorbe una parte mientras le quede. */
   takeHit(damage, fromX, fromY, from) {
     const i = this.index;
     if (Health.hp[i] <= 0) return;
+    const armor = WeaponHolder.armor[i];
+    if (armor > 0) {
+      const absorbed = Math.min(armor, damage * ARMOR.absorb);
+      WeaponHolder.armor[i] = armor - absorbed;
+      damage -= absorbed;
+    }
     Health.hp[i] -= damage;
 
     let dx = this.x - fromX;
@@ -303,7 +528,7 @@ export class Person extends GameObject {
     SoundManager.play(PAIN_SOUNDS[(rng() * PAIN_SOUNDS.length) | 0], volume, 0.9, 1.1, 0, 0, this.x, this.y);
   }
 
-  /** Muere: sangre, grito, cadáver, suelta la plata y vuelve al pool. */
+  /** Muere: sangre, grito, cadáver, suelta lo que llevaba y vuelve al pool. */
   die(dirX, dirY) {
     const i = this.index;
     const x = this.x;
@@ -317,10 +542,20 @@ export class Person extends GameObject {
       sheet: this.constructor.spritesheets[PersonStats.sheet[i]],
       scale: this.scaleX,
     });
-    const money = Loot.money[i];
-    if (money > 0) Drop.spawn({ x, y, kind: DROP_KIND.MONEY, amount: money });
+    // Las armas se pierden al morir: quedan en el piso para el que las agarre.
+    const weapon = WeaponHolder.weapon[i];
+    if (weapon !== WEAPON.FISTS) Drop.spawn({ x, y, kind: DROP_KIND.WEAPON, amount: weapon });
+    dropLoot(this.constructor.lootTable, x, y, Loot.money[i]);
 
     this.onDeath();
     this.despawn();
   }
 }
+
+/** Ancho real de los PNG de armas (assets/img/drops). */
+const TEXTURE_WIDTH = {
+  drop_bat: 48,
+  drop_pistol: 163,
+  drop_shotgun: 294,
+  drop_smg: 378,
+};

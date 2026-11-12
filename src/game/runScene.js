@@ -15,6 +15,8 @@ import { Corpse } from './entities/Corpse.js';
 import { Drop } from './entities/Drop.js';
 import { MoveMarker } from './entities/MoveMarker.js';
 import { CivilianSpawner } from './systems/civilianSpawner.js';
+import { CAR_SHEETS, WRECK_SHEET, CAR_ANGLES } from './entities/props/ParkedCar.js';
+import { WEAPON } from './config/weapons.js';
 import { CITY_ENTITIES, loadCityData, spawnCity, nearestSidewalk } from './world/cityMap.js';
 import { SquadState, SQUAD_STATE_SCHEMA, setSquadTarget, squadCentroid } from './systems/squadState.js';
 import { RunState, RUN_STATE_SCHEMA } from './systems/runState.js';
@@ -37,6 +39,21 @@ function personSheets(names, keepAnimations) {
       png: asset(`img/people/${name}.png`),
       excludeAnimations: exclude,
     };
+  }
+  return out;
+}
+
+/** Hojas de autos: de los 48 ángulos (cada 7,5°) solo se cargan los 4 de un auto estacionado. */
+function carSheets() {
+  const exclude = [];
+  for (let k = 0; k < 48; k++) {
+    const angle = String(k * 7.5);
+    if (!CAR_ANGLES.includes(angle)) exclude.push(angle);
+  }
+  const out = {};
+  for (const name of [...CAR_SHEETS, WRECK_SHEET]) {
+    const file = name.replace('car_', '');
+    out[name] = { json: asset(`img/cars/${file}.json`), png: asset(`img/cars/${file}.png`), excludeAnimations: exclude };
   }
   return out;
 }
@@ -66,6 +83,8 @@ export class RunScene extends Scene {
     lighting: { enabled: false },
     // Sangre: partículas que caen y quedan como manchas en el piso (decals).
     particle: { maxParticles: 6000, decals: true, decalsTileSize: 256, decalsResolution: 0.5 },
+    // El arma en la mano de cada persona es una decoración pegada a ella.
+    decoration: { maxDecorations: 1500 },
     navigation: { enabled: true, cellSize: NAV.cellSize },
     layers: {
       ground: { kind: LAYER_KIND.TILEMAP, tilemap: 'city', scale: 1, zIndex: 0.5 },
@@ -77,11 +96,22 @@ export class RunScene extends Scene {
       ...numberedTextures('house', 'houses', HOUSE_COUNT),
       ...numberedTextures('tree', 'trees', TREE_COUNT),
       blood: asset('img/fx/blood.png'),
+      muzzle1: asset('img/fx/muzzle1.png'),
+      muzzle2: asset('img/fx/muzzle2.png'),
+      muzzle3: asset('img/fx/muzzle3.png'),
       drop_money: asset('img/drops/money.png'),
+      drop_bat: asset('img/drops/bat.png'),
+      drop_pistol: asset('img/drops/pistol.png'),
+      drop_shotgun: asset('img/drops/shotgun.png'),
+      drop_smg: asset('img/drops/ak47.png'),
+      drop_armor: asset('img/drops/armor.png'),
+      trash: asset('img/props/trash.png'),
+      atm: asset('img/props/atm.png'),
     },
     spritesheets: {
       ...personSheets(SHEETS.recruit, ROLE_ANIMATIONS.recruit),
       ...personSheets(SHEETS.civilian, ROLE_ANIMATIONS.civilian),
+      ...carSheets(),
     },
     tilemaps: {
       city: { json: asset('map/little_city_tilemap.json'), png: asset('map/tiles.png') },
@@ -127,15 +157,15 @@ export class RunScene extends Scene {
     this._focusY = WORLD.height / 2;
   }
 
-  /** @param {{ startRecruits?: number }} data lo que manda main.js (más adelante: perfil y loadout) */
-  createNewGame({ startRecruits = 1 } = {}) {
+  /** @param {{ startRecruits?: number, startWeapon?: number }} data lo que manda main.js (más adelante: perfil y loadout) */
+  createNewGame({ startRecruits = 1, startWeapon = WEAPON.FISTS } = {}) {
     const spawn = nearestSidewalk(this.cityData, WORLD.width / 2, WORLD.height / 2);
     const count = clamp(startRecruits | 0, 1, SQUAD.maxRecruits);
     for (let k = 0; k < count; k++) {
       // Apiñados en espiral alrededor del punto de partida; la separación los acomoda.
       const r = SQUAD.formationSpacing * Math.sqrt(k);
       const a = k * 2.4;
-      Recruit.spawn({ x: spawn.x + Math.cos(a) * r, y: spawn.y + Math.sin(a) * r });
+      Recruit.spawn({ x: spawn.x + Math.cos(a) * r, y: spawn.y + Math.sin(a) * r, weapon: startWeapon });
     }
     setSquadTarget(spawn.x, spawn.y);
     Camera.centerOn(spawn.x, spawn.y);

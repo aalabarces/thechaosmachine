@@ -18,14 +18,12 @@ export const RECRUIT = {
   colliderRadius: 11,
   scaleMin: 0.78,
   scaleSpan: 0.12,
-  /** Combate y looteo. */
+  /** Combate y looteo. Daño, alcance y cooldown dependen del arma (config/weapons.js). */
   hp: 100,
-  damage: 12,
-  /** Distancia entre centros a la que pega (px). */
-  attackRange: 24,
-  attackCooldownMs: 650,
-  /** Ve a un hostil a esta distancia y va a pegarle (px). */
+  /** Ve a un hostil a esta distancia y va a pegarle (px). Con un arma de fuego, ve hasta su alcance. */
   violenceRange: 130,
+  /** Con un arma de fuego se planta a esta fracción de su alcance para disparar. */
+  shootRangeFraction: 0.85,
   /**
    * Solo pelea o lootea cosas a menos de esto de su puesto en la formación (px). Mientras el
    * malón va hacia un destino lejano, el puesto está allá: no se frenan a pelear en el camino.
@@ -36,6 +34,8 @@ export const RECRUIT = {
   lootSpeed: 1,
   /** Junta un drop a esta distancia (px). */
   pickupRadius: 16,
+  /** Si en este tiempo no llegó a juntar el drop que fue a buscar (trabado), lo abandona (ms). */
+  lootGiveUpMs: 3500,
   /** Variación individual de la velocidad máxima (± fracción). */
   speedJitter: 0.06,
 };
@@ -53,9 +53,7 @@ export const CIVILIAN = {
   scaleMin: 0.7,
   scaleSpan: 0.2,
   hp: 30,
-  /** Plata que llevan encima (y sueltan al morir). */
-  moneyMin: 5,
-  moneyMax: 40,
+  /** La plata que llevan encima y lo que pueden soltar: config/lootTables.js (civilian). */
   /** Paseando: empuje sobre el flowfield de veredas (px/s²) y tope de velocidad. */
   walkAccel: 220,
   walkMaxSpeed: 110,
@@ -86,6 +84,25 @@ export const COMBAT = {
   punchAnimMs: 330,
   bloodPerHit: 4,
   bloodOnDeath: 14,
+  /** Los disparos salen a esta altura sobre los pies (px), para el fogonazo y la estela. */
+  muzzleHeight: 16,
+  /** Cuánto dura la estela de un disparo en pantalla (ms). */
+  tracerMs: 70,
+  /** Un disparo asusta a los civiles a esta distancia del que dispara (px; limitado por su visualRange). */
+  gunshotPanicRadius: 300,
+};
+
+/** Cosas rompibles. hp = cuánto aguantan; lootTable en config/lootTables.js. */
+export const PROPS = {
+  trashCan: { hp: 25, width: 40, colliderRadius: 14, count: 160 },
+  /** spacing: distancia mínima entre autos (px), para que quede paso entre ellos. */
+  parkedCar: { hp: 140, count: 70, spacing: 230 },
+  atm: { hp: 220, width: 22, height: 34, count: 25 },
+  /** Los autos ya destrozados quedan como chatarra (cobertura) y se oscurecen. */
+  wreckTint: 0x777777,
+  /** Partículas al recibir un golpe y al romperse. */
+  debrisPerHit: 3,
+  debrisOnBreak: 14,
 };
 
 export const DROP = {

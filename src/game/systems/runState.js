@@ -10,4 +10,11 @@ export const RUN_STATE_SCHEMA = {
   money: { type: Int32Array, mailbox: true },
   /** Civiles muertos en esta run (resultados del capítulo, heat policial en la fase 5). */
   civiliansKilled: { type: Int32Array, mailbox: true },
+  /**
+   * 1 en la posición de cada arma (WEAPON.*) que el malón juntó en esta run. Alimenta los
+   * desbloqueos del mercado (fase 6). Todos los que escriben, escriben 1: no hay carrera.
+   */
+  weaponsFound: { type: Uint8Array, length: 8 },
+  /** Chalecos juntados en esta run (desbloqueo del chaleco en el mercado). */
+  armorsFound: { type: Int32Array, mailbox: true },
 };

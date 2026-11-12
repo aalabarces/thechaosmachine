@@ -12,6 +12,7 @@ import { PersonStats } from '../components/PersonStats.js';
 import { Brain } from '../components/Brain.js';
 import { CivilianFSM } from '../ai/civilianFSM.js';
 import { RunState } from '../systems/runState.js';
+import { rollMoney } from '../systems/loot.js';
 
 const { NavGrid, Transform, rng } = WEED;
 
@@ -26,6 +27,8 @@ export class Civilian extends Person {
   static spritesheets = SHEETS.civilian;
   static stats = CIVILIAN;
   static faction = FACTION.CIVILIAN;
+  static lootTable = 'civilian';
+  static baseVisualRange = CIVILIAN.visualRange;
 
   /** ms que representa un tick (para timers). */
   msPerTick = 16.67 * TICK_INTERVAL;
@@ -33,9 +36,8 @@ export class Civilian extends Person {
   onSpawned(spawnConfig = {}) {
     super.onSpawned(spawnConfig);
     const i = this.index;
-    this.collider.visualRange = CIVILIAN.visualRange;
     PersonStats.maxSpeed[i] = CIVILIAN.walkMaxSpeed * (1 + (rng() * 2 - 1) * CIVILIAN.walkJitter);
-    Loot.money[i] = CIVILIAN.moneyMin + ((rng() * (CIVILIAN.moneyMax - CIVILIAN.moneyMin + 1)) | 0);
+    Loot.money[i] = rollMoney('civilian');
     Brain.homeX[i] = this.x;
     Brain.homeY[i] = this.y;
     // El pool reusa entidades: arrancar siempre paseando.

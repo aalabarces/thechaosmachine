@@ -14,5 +14,6 @@ export class Brain extends Component {
     calmMs: Float32Array, // tiempo sin ver peligro
     homeX: Float32Array, // un punto conocido de vereda: vuelve ahí si se perdió del flowfield
     homeY: Float32Array,
+    ignoreDrop: Int32Array, // drop que abandonó por no poder llegar: no lo vuelve a reservar
   };
 }

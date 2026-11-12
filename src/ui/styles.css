@@ -44,3 +44,29 @@ body {
   font-size: 22px;
   letter-spacing: 2px;
 }
+
+/* Avisos cortos ("¡Encontraste una ESCOPETA!"): aparecen arriba al centro y se van solos. */
+.toasts {
+  position: absolute;
+  top: calc(80px + env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.toast {
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffd23f;
+  animation: toast-life 2.6s ease-out forwards;
+}
+
+@keyframes toast-life {
+  0% { opacity: 0; transform: translateY(-8px) scale(1.15); }
+  10% { opacity: 1; transform: translateY(0) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
