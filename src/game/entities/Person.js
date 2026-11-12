@@ -78,7 +78,7 @@ export class Person extends GameObject {
   /** Cuenta de disparos (para no asustar civiles con cada bala de la ametralladora). */
   _shots = 0;
 
-  onSpawned({ x = 0, y = 0, sheet, weapon = WEAPON.FISTS } = {}) {
+  onSpawned({ x = 0, y = 0, sheet, weapon = WEAPON.FISTS, armor = 0 } = {}) {
     this.x = x;
     this.y = y;
     const i = this.index;
@@ -116,7 +116,7 @@ export class Person extends GameObject {
     Brain.threatY[i] = y;
     Brain.calmMs[i] = 0;
     Brain.lastAttacker[i] = -1;
-    WeaponHolder.armor[i] = 0;
+    WeaponHolder.armor[i] = Math.min(ARMOR.max, armor);
     WeaponHolder.decoIndex[i] = -1;
 
     this._facing = DIR_DOWN;
@@ -309,13 +309,22 @@ export class Person extends GameObject {
     const i = this.index;
     const w = WEAPONS[weapon] ?? WEAPONS[WEAPON.FISTS];
     WeaponHolder.weapon[i] = WEAPONS[weapon] ? weapon : WEAPON.FISTS;
-    PersonStats.damage[i] = w.damage;
+    PersonStats.damage[i] = w.damage * this.damageMultiplier();
     PersonStats.attackRange[i] = w.range;
-    PersonStats.attackCooldownMs[i] = w.cooldownMs;
+    PersonStats.attackCooldownMs[i] = w.cooldownMs * this.cooldownMultiplier();
     // Para ver blancos a la distancia de tiro, los vecinos tienen que llegar hasta ahí.
     const base = this.constructor.baseVisualRange;
     this.collider.visualRange = w.ranged && w.range > base ? w.range : base;
     this._refreshWeaponDeco();
+  }
+
+  /** Mejoras de daño y de velocidad de ataque (los reclutas las toman del perfil). */
+  damageMultiplier() {
+    return 1;
+  }
+
+  cooldownMultiplier() {
+    return 1;
   }
 
   /** Rango de "violencia" efectivo: con un arma de fuego, ve hasta donde dispara. */
@@ -596,8 +605,27 @@ export class Person extends GameObject {
     }
   }
 
-  onMessage(name, from, a, b, c) {
+  /**
+   * 'hit'   golpe o balazo: (daño, desdeX, desdeY), lo pegó `from`.
+   * 'blast' explosión o fuego: (daño, desdeX, desdeY, culpable + 1). El culpable es quien la
+   *         provocó (el que rompió el auto), así las muertes y el heat se le anotan a él.
+   */
+  onMessage(name, from, a, b, c, d) {
     if (name === 'hit') this.takeHit(a, b, c, from);
+    else if (name === 'blast') this.takeBlast(a, b, c, d > 0 ? d - 1 : -1);
+  }
+
+  /** Daño de una explosión: como un golpe, más un empujón fuerte hacia afuera. */
+  takeBlast(damage, fromX, fromY, culprit) {
+    const i = this.index;
+    if (Health.hp[i] <= 0) return;
+    this.takeHit(damage, fromX, fromY, culprit);
+    if (Transform.active[i] !== 1 || Health.hp[i] <= 0) return;
+    let dx = this.x - fromX;
+    let dy = this.y - fromY;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const push = Math.min(1, damage / 60) * COMBAT.blastPush;
+    this.addVelocity((dx / dist) * push, (dy / dist) * push);
   }
 
   /** Recibe `damage` desde (fromX, fromY). El chaleco absorbe una parte mientras le quede. */

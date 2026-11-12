@@ -1,5 +1,5 @@
 // HUD minimalista: un indicador por recurso. Lee el estado compartido de la run cada frame
-// y solo toca el DOM cuando un valor cambia.
+// y solo toca el DOM cuando un valor cambia. Uno por capítulo: destroy() lo saca al terminar.
 
 import { RunState } from '../game/systems/runState.js';
 import { Recruit } from '../game/entities/Recruit.js';
@@ -26,8 +26,10 @@ export function createHud(root, { dev = false } = {}) {
   let lastMoney = NaN;
   let lastRecruits = NaN;
   let lastStars = NaN;
+  let alive = true;
 
   function frame() {
+    if (!alive) return;
     const m = RunState.money.load();
     if (m !== lastMoney) {
       lastMoney = m;
@@ -46,6 +48,13 @@ export function createHud(root, { dev = false } = {}) {
     requestAnimationFrame(frame);
   }
   frame();
+
+  return {
+    destroy() {
+      alive = false;
+      box.remove();
+    },
+  };
 }
 
 function item(parent, className) {

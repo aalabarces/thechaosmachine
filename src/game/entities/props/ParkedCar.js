@@ -2,8 +2,9 @@
 // como chatarra quemada que sigue sirviendo de cobertura. Adentro: plata, a veces armas o chaleco.
 
 import { Prop } from './Prop.js';
-import { PROPS } from '../../config/balance.js';
+import { PROPS, EXPLOSION } from '../../config/balance.js';
 import { emitGlass } from '../../systems/effects.js';
+import { explode } from '../../systems/explosions.js';
 
 const { ShapeType, rng } = WEED;
 
@@ -48,5 +49,8 @@ export class ParkedCar extends Prop {
     this.setSpritesheet(WRECK_SHEET);
     this.setAnimation(this._angle);
     this.setTint(PROPS.wreckTint);
+    // Explota: lastima a todo alrededor (otros autos incluidos: reacción en cadena) y deja fuego.
+    // Se le anota a quien lo rompió.
+    explode(this, this.x, this.y, EXPLOSION.car, this.lastAttacker);
   }
 }

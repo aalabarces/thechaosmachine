@@ -117,9 +117,9 @@ export class Civilian extends Person {
     if (CivilianFSM.state[i] !== CivilianFSM.states.FLEE.stateIndex) this.civilianFSM.changeState(CivilianFSM.states.FLEE);
   }
 
-  onMessage(name, from, a, b, c) {
+  onMessage(name, from, a, b, c, d) {
     if (name === 'panic') this.panicFrom(a, b);
-    else super.onMessage(name, from, a, b, c);
+    else super.onMessage(name, from, a, b, c, d);
   }
 
   onHurt(fromX, fromY) {

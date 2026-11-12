@@ -17,8 +17,8 @@ index.html          import map del engine, raíz de la UI, arranca src/main.js
 assets/             mapa, casas, árboles, personajes (tomados de la demo littleCity)
 src/
   main.js           (página) arranca el engine y el flujo de pantallas
-  ui/               (página) HUD y pantallas en HTML
-  meta/             (página) perfil guardado, mercado, loadout (fases futuras)
+  ui/               (página) HUD, avisos y screens/: menú, partida, mercado, preparación, resultados
+  meta/             (página) profile.js (localStorage) y marketCatalog.js (mejoras, desbloqueos, precios)
   game/             lo cargan la página Y los workers: no importa el engine, usa el global WEED
     runScene.js     la escena de una run (= un capítulo)
     assets.js       URLs de assets relativas al módulo
@@ -27,9 +27,10 @@ src/
     ai/             FSM por rol (WEED.FSM): recruitFSM (atacar > lootear > seguir), civilianFSM (pasear ↔ huir),
                     enemyFSM (rondar → atacar → huir)
     entities/       Person → Recruit / Civilian / Enemy (→ Police / Gang); Corpse, Drop, MoveMarker;
-                    props/: House, Tree (escenografía) y Prop → TrashCan / ParkedCar / Atm (rompibles)
-    systems/        estado compartido (SquadState, RunState), SpawnDirector (heat, policía, pandillas),
-                    spawner de civiles, loot y efectos
+                    props/: House, Tree (escenografía), Prop → TrashCan / ParkedCar / Atm (rompibles),
+                    Mine, SafeHouseSign; fx/: Explosion, Fire
+    systems/        estado compartido (SquadState, RunState, RunModifiers), SpawnDirector (heat, policía,
+                    pandillas), SafeHouses (bares), explosiones, spawner de civiles, loot y efectos
     world/          el mapa (littleCity por ahora; generador procedural más adelante)
 ```
 
@@ -39,5 +40,7 @@ Reglas:
 - La progresión permanente vive en la página (localStorage) y entra a la run por `loadScene(url, { data })`.
 
 Parámetros de dev (solo con `npm run dev`):
-- `?recruits=N` arranca con N reclutas.
-- `?weapon=bat|pistol|shotgun|smg` todos arrancan con esa arma.
+- `?money=N` suma N al perfil al entrar a la partida.
+- `?found=all` marca todo como encontrado (se pueden comprar todos los desbloqueos).
+- `?recruits=N` arranca cada capítulo con N reclutas.
+- `?weapon=bat|pistol|shotgun|smg` los reclutas sin arma del loadout arrancan con esa.

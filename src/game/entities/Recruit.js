@@ -14,7 +14,7 @@ import { Faction } from '../components/Faction.js';
 import { FACTION } from '../config/factions.js';
 import { WEAPONS, ARMOR } from '../config/weapons.js';
 import { SHEETS } from '../config/sprites.js';
-import { SquadState } from '../systems/squadState.js';
+import { SquadState, FOCUS } from '../systems/squadState.js';
 import { nearestWalkable } from '../world/navUtils.js';
 import { PersonStats } from '../components/PersonStats.js';
 import { Brain } from '../components/Brain.js';
@@ -23,6 +23,8 @@ import { WeaponHolder } from '../components/WeaponHolder.js';
 import { RecruitFSM } from '../ai/recruitFSM.js';
 import { Drop, DROP_KIND } from './Drop.js';
 import { RunState } from '../systems/runState.js';
+import { RunModifiers } from '../systems/runModifiers.js';
+import { Health } from '../components/Health.js';
 
 const { NavGrid, Transform, rng } = WEED;
 
@@ -46,15 +48,21 @@ export class Recruit extends Person {
   _goalY = NaN;
   _orderSeen = -1;
   _countSeen = -1;
+  /** Última orden de moverse y último foco que vio (para entrar en marcha / en foco una sola vez). */
+  _marchOrderSeen = 0;
+  _focusSeen = 0;
 
   onSpawned(spawnConfig = {}) {
     super.onSpawned(spawnConfig);
     const i = this.index;
     // Daño, alcance y cooldown salen del arma (Person.equipWeapon).
-    PersonStats.maxSpeed[i] = RECRUIT.maxSpeed * (1 + (rng() * 2 - 1) * RECRUIT.speedJitter);
-    PersonStats.violenceRange[i] = RECRUIT.violenceRange;
+    // Mejoras compradas en el mercado (RunModifiers, escrito por la escena al empezar).
+    PersonStats.maxSpeed[i] = RECRUIT.maxSpeed * RunModifiers.speed[0] * (1 + (rng() * 2 - 1) * RECRUIT.speedJitter);
+    PersonStats.violenceRange[i] = RECRUIT.violenceRange * RunModifiers.sight[0];
+    Health.hp[i] = RECRUIT.hp * RunModifiers.hp[0];
+    Health.maxHp[i] = Health.hp[i];
     Brain.ignoreDrop[i] = -1;
-    PersonStats.lootSpeed[i] = RECRUIT.lootSpeed;
+    PersonStats.lootSpeed[i] = RECRUIT.lootSpeed * RunModifiers.lootSpeed[0];
 
     // El pool reusa entidades: arrancar siempre siguiendo al malón.
     RecruitFSM.state[i] = RecruitFSM.states.FOLLOW.stateIndex;
@@ -64,6 +72,11 @@ export class Recruit extends Person {
     // Puesto en la formación: se recalcula cuando cambia la orden o la cantidad de reclutas.
     this._orderSeen = -1;
     this._countSeen = -1;
+    // Un recluta recién llegado no arranca marchando ni con el foco viejo.
+    this._marchOrderSeen = SquadState.orderId[0];
+    this._focusSeen = SquadState.focusId[0];
+    Brain.marching[i] = 0;
+    Brain.marchMs[i] = 0;
     this.slotX = this.x;
     this.slotY = this.y;
     // Destino efectivo: el de la orden, corrido a una celda libre si cayó sobre un obstáculo.
@@ -71,13 +84,83 @@ export class Recruit extends Person {
     this._goalY = this.y;
   }
 
+  /**
+   * Las órdenes del jugador van primero (en este orden):
+   *   1. foco (click derecho): todos van a pegarle / juntar eso, sin importar rango ni correa;
+   *   2. orden de moverse: marcha hasta su puesto sin pelear ni lootear;
+   *   3. si no, la FSM: atacar > lootear > seguir.
+   */
   tick(dtRatio) {
+    const i = this.index;
     const ms = dtRatio * this.msPerTick;
     this.coolDown(ms);
     this._refreshSlot();
-    this.recruitFSM.tick(dtRatio, this);
+
+    const order = SquadState.orderId[0];
+    if (order !== this._marchOrderSeen) {
+      this._marchOrderSeen = order;
+      Brain.marching[i] = 1;
+      Brain.marchMs[i] = 0;
+    }
+
+    if (this._followFocus(ms)) {
+      // foco del jugador
+    } else if (Brain.marching[i]) {
+      this._suspendFsm();
+      this.followSquad();
+      Brain.marchMs[i] += ms;
+      if (this.isNear(this.slotX, this.slotY, RECRUIT.marchArriveRadius) || Brain.marchMs[i] > RECRUIT.marchTimeoutMs) {
+        Brain.marching[i] = 0;
+      }
+    } else {
+      this.recruitFSM.tick(dtRatio, this);
+    }
     this.applySeparation(SQUAD.separationRadius, SQUAD.separationForce);
     this.updateAnimation(ms);
+  }
+
+  /**
+   * Foco del click derecho. @returns {boolean} false si no hay foco o ya no vale (murió, se rompió,
+   * lo juntaron): entonces sigue con lo de siempre.
+   */
+  _followFocus(ms) {
+    const f = SquadState.focusTarget[0];
+    if (f < 0 || Transform.active[f] !== 1 || Transform.entityType[f] !== SquadState.focusType[0]) return false;
+    const i = this.index;
+    const kind = SquadState.focusKind[0];
+    if (kind === FOCUS.ATTACK && (Health.hp[f] <= 0 || Health.maxHp[f] <= 0)) return false;
+    if (kind === FOCUS.LOOT && !Drop.isAvailable(f)) return false;
+    if (SquadState.focusId[0] !== this._focusSeen) {
+      // Foco nuevo: deja lo que estaba haciendo.
+      this._focusSeen = SquadState.focusId[0];
+      this._suspendFsm();
+      Brain.progressMs[i] = 0;
+    }
+    Brain.marching[i] = 0;
+    if (kind === FOCUS.ATTACK) {
+      Brain.target[i] = f;
+      this.fight(f);
+    } else if (this.isNear(Transform.x[f], Transform.y[f], SQUAD.directRadius)) {
+      this.pickUp(f, ms);
+    } else {
+      this.navigateTo(Transform.x[f], Transform.y[f], PersonStats.maxSpeed[i], RECRUIT.responsiveness);
+    }
+    return true;
+  }
+
+  /** Corta lo que hacía la FSM (suelta el drop reservado) y la deja en SEGUIR, sin pasar por sus estados. */
+  _suspendFsm() {
+    const i = this.index;
+    const follow = RecruitFSM.states.FOLLOW.stateIndex;
+    if (RecruitFSM.state[i] === follow && RecruitFSM.nextState[i] === -1) return;
+    const d = Brain.target[i];
+    if (RecruitFSM.state[i] === RecruitFSM.states.LOOT.stateIndex && Drop.isAvailable(d) && DropData.claimedBy[d] === i) {
+      DropData.claimedBy[d] = -1;
+    }
+    Brain.target[i] = -1;
+    RecruitFSM.state[i] = follow;
+    RecruitFSM.nextState[i] = -1;
+    RecruitFSM.time[i] = 0;
   }
 
   // ---------------------------------------------------------------- seguir al malón
@@ -139,6 +222,14 @@ export class Recruit extends Person {
     return dx * dx + dy * dy <= RECRUIT.leashRadius * RECRUIT.leashRadius;
   }
 
+  damageMultiplier() {
+    return RunModifiers.damage[0];
+  }
+
+  cooldownMultiplier() {
+    return RunModifiers.cooldown[0];
+  }
+
   // ---------------------------------------------------------------- recibir daño
 
   /** Grita a veces; si le dispara un enemigo, va por él (aunque no lo tenga en su rango de vista). */
@@ -146,6 +237,8 @@ export class Recruit extends Person {
     const i = this.index;
     if (rng() < RECRUIT.painSoundChance) this.playPain(0.5);
     if (from < 0 || !isEnemyFaction(Faction.id[from]) || !this.isValidTarget(from)) return;
+    // Cumpliendo una orden (marcha o foco), no se da vuelta a pelear.
+    if (Brain.marching[i] || SquadState.focusTarget[0] >= 0) return;
     if (RecruitFSM.state[i] === RecruitFSM.states.ATTACK.stateIndex || !this.isInLeash(from)) return;
     Brain.target[i] = from;
     this.recruitFSM.changeState(RecruitFSM.states.ATTACK);
@@ -239,7 +332,7 @@ export class Recruit extends Person {
     const y = Transform.y[d];
     Drop.despawn(d);
     if (kind === DROP_KIND.MONEY) {
-      RunState.money.add(amount);
+      RunState.money.add(Math.round(amount * RunModifiers.lootMoney[0]));
     } else if (kind === DROP_KIND.WEAPON) {
       // Equipa la mejor y deja la vieja en el piso para otro compañero.
       const old = WeaponHolder.weapon[i];

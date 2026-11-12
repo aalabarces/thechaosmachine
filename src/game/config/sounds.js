@@ -10,6 +10,9 @@ export const SOUND_FILES = {
   smg: 'ametralladora_disparo.mp3',
   metal1: 'bala_golpea_metal.mp3',
   metal2: 'bala_golpea_metal_2.mp3',
+  boomShort: 'explosion_corta.mp3',
+  boomLong: 'explosion_larga.mp3',
+  fire: 'explosion_de_fuego.mp3',
 };
 
 export const PAIN_SOUNDS = ['pain1', 'pain2', 'pain3', 'pain4'];

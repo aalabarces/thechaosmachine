@@ -3,25 +3,30 @@
 // frente a las casas). Más adelante mapGenerator.js arma uno al azar con la misma salida.
 
 import { asset } from '../assets.js';
-import { PROPS, NAV } from '../config/balance.js';
+import { PROPS, NAV, MINES } from '../config/balance.js';
 import { House } from '../entities/props/House.js';
 import { Tree } from '../entities/props/Tree.js';
 import { TrashCan } from '../entities/props/TrashCan.js';
 import { ParkedCar } from '../entities/props/ParkedCar.js';
 import { Atm } from '../entities/props/Atm.js';
+import { Mine } from '../entities/props/Mine.js';
 
 const { NavGrid, rng } = WEED;
 
 /** Lado de las celdas del JSON de objetos (veredas y calles), px. */
 const MAP_CELL = 48;
 
+/** Hasta cuántas veces la cantidad base de props puede pedir la mejora "Más para romper". */
+const MAX_PROPS_MULTIPLIER = 3;
+
 /** Pools de las entidades del mapa (van a static entities de la escena). */
 export const CITY_ENTITIES = [
   [House, 80],
   [Tree, 1300],
-  [TrashCan, PROPS.trashCan.count + 20],
-  [ParkedCar, PROPS.parkedCar.count + 10],
-  [Atm, PROPS.atm.count + 5],
+  [TrashCan, PROPS.trashCan.count * MAX_PROPS_MULTIPLIER],
+  [ParkedCar, PROPS.parkedCar.count * MAX_PROPS_MULTIPLIER],
+  [Atm, PROPS.atm.count * MAX_PROPS_MULTIPLIER],
+  [Mine, MINES.count + 5],
 ];
 
 /** Baja el JSON de objetos del mapa: casas, árboles, celdas de vereda y de calle. */
@@ -30,17 +35,21 @@ export async function loadCityData() {
   return res.json();
 }
 
-/** Spawnea la escenografía y los props, y marca como no caminable lo que no se mueve. */
-export function spawnCity(data) {
+/**
+ * Spawnea la escenografía y los props, y marca como no caminable lo que no se mueve.
+ * @param {number} [propsMultiplier] mejora "Más para romper" del mercado (1 = la cantidad base)
+ */
+export function spawnCity(data, propsMultiplier = 1) {
+  const mul = Math.min(MAX_PROPS_MULTIPLIER, Math.max(0, propsMultiplier));
   const houses = data.houses || [];
   for (let i = 0; i < houses.length; i++) House.spawn({ x: houses[i].x, y: houses[i].y });
 
   const trees = data.trees || [];
   for (let i = 0; i < trees.length; i++) Tree.spawn({ x: trees[i].x, y: trees[i].y, radius: trees[i].radius });
 
-  spawnTrashCans(data);
-  spawnParkedCars(data);
-  spawnAtms(houses);
+  spawnTrashCans(data, Math.round(PROPS.trashCan.count * mul));
+  spawnParkedCars(data, Math.round(PROPS.parkedCar.count * mul));
+  spawnAtms(houses, Math.round(PROPS.atm.count * mul));
 
   // Los tachos no: son chicos y se rompen enseguida.
   NavGrid.updateNavGrid([
@@ -49,6 +58,20 @@ export function spawnCity(data) {
     ...ParkedCar.getAllActive(),
     ...Atm.getAllActive(),
   ]);
+}
+
+/**
+ * Minas escondidas en celdas de vereda/calle al azar, lejos del punto de partida y separadas.
+ * Son de la run (no del mapa fijo): se ponen en cada partida nueva.
+ */
+export function spawnMines(data, startX, startY, count) {
+  const far2 = MINES.minDistanceFromStart * MINES.minDistanceFromStart;
+  const cells = shuffled(data.sidewalks || []).filter((c) => {
+    const dx = c.x - startX;
+    const dy = c.y - startY;
+    return dx * dx + dy * dy > far2;
+  });
+  for (const s of pickSpread(cells, count, MINES.minSpacing)) Mine.spawn({ x: s.x + (rng() - 0.5) * 20, y: s.y + (rng() - 0.5) * 20 });
 }
 
 /** La celda de vereda más cercana a (x, y): un lugar seguro donde aparecer. */
@@ -106,11 +129,11 @@ function pickSpread(candidates, count, minDist) {
 }
 
 /** Tachos en veredas de verdad: en el JSON las celdas de calle también figuran como vereda. */
-function spawnTrashCans(data) {
+function spawnTrashCans(data, count) {
   const road = new Set();
   for (const r of data.roads || []) for (const c of r.cells || []) road.add(cellKey(c.x, c.y));
   const sidewalks = (data.sidewalks || []).filter((c) => !road.has(cellKey(c.x, c.y)));
-  const spots = pickSpread(shuffled(sidewalks), PROPS.trashCan.count, 180);
+  const spots = pickSpread(shuffled(sidewalks), count, 180);
   for (const s of spots) TrashCan.spawn({ x: s.x + (rng() - 0.5) * 16, y: s.y + (rng() - 0.5) * 16 });
 }
 
@@ -119,7 +142,7 @@ function spawnTrashCans(data) {
  * calle: si la celda de arriba o la de abajo ya no es calle, la calle corre horizontal; si es la
  * de un costado, vertical. Las esquinas (las dos cosas) se saltean.
  */
-function spawnParkedCars(data) {
+function spawnParkedCars(data, count) {
   const road = new Set();
   const cells = [];
   for (const r of data.roads || []) {
@@ -137,7 +160,7 @@ function spawnParkedCars(data) {
     if (edgeV === edgeH) continue;
     curb.push(edgeV ? snapCar(c.x, c.y, true) : snapCar(c.x, c.y, false));
   }
-  const spots = pickSpread(shuffled(curb), PROPS.parkedCar.count, PROPS.parkedCar.spacing);
+  const spots = pickSpread(shuffled(curb), count, PROPS.parkedCar.spacing);
   for (const s of spots) ParkedCar.spawn(s);
 }
 
@@ -155,7 +178,9 @@ function snapCar(x, y, horizontal) {
 }
 
 /** Cajeros pegados al frente (abajo) de casas al azar. */
-function spawnAtms(houses) {
-  const spots = shuffled(houses).slice(0, PROPS.atm.count);
+function spawnAtms(houses, count) {
+  // Más cajeros que casas: algunas casas tienen dos.
+  const spots = [];
+  while (spots.length < count && houses.length > 0) spots.push(...shuffled(houses).slice(0, count - spots.length));
   for (const h of spots) Atm.spawn({ x: h.x + (rng() - 0.5) * 120, y: h.y + 24 });
 }

@@ -4,7 +4,7 @@
 // desde dónde mide su correa (anchor / leashRadius).
 
 import { Person } from './Person.js';
-import { ENEMY } from '../config/balance.js';
+import { ENEMY, DIRECTOR } from '../config/balance.js';
 import { isHostile } from '../config/factions.js';
 import { Faction } from '../components/Faction.js';
 import { Health } from '../components/Health.js';
@@ -13,6 +13,8 @@ import { Brain } from '../components/Brain.js';
 import { EnemyFSM } from '../ai/enemyFSM.js';
 import { SquadState } from '../systems/squadState.js';
 import { RunState } from '../systems/runState.js';
+import { Loot } from '../components/Loot.js';
+import { rollMoney } from '../systems/loot.js';
 
 const { Transform, rng } = WEED;
 
@@ -34,6 +36,8 @@ export class Enemy extends Person {
     PersonStats.maxSpeed[i] = s.maxSpeed * (0.94 + rng() * 0.12);
     PersonStats.violenceRange[i] = s.violenceRange;
     PersonStats.lootSpeed[i] = 1;
+    // Un malón más fuerte trae enemigos más duros que dejan más plata (GDD).
+    Loot.money[i] = Math.round(rollMoney(this.constructor.lootTable) * (1 + SquadState.strength[0] * DIRECTOR.enemyMoneyPerStrength));
     Brain.homeX[i] = spawnConfig.homeX ?? this.x;
     Brain.homeY[i] = spawnConfig.homeY ?? this.y;
     Brain.goalX[i] = this.x;

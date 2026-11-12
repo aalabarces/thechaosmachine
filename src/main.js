@@ -1,10 +1,19 @@
-// Página: arranca el engine y maneja el flujo del juego.
-// Por ahora va directo a una run. Más adelante: menú → preparación → run → resultados → mercado.
+// Página: arranca el engine y maneja el flujo del juego (GDD):
+//   menú → partida (preparar / mercado / salir) → preparación → capítulo → resultados → partida…
+// La progresión vive acá (localStorage, meta/profile.js). Cada capítulo es una carga nueva de
+// RunScene, que recibe por `data` lo que necesita: los workers no tienen localStorage.
 
 import { createHud } from './ui/hud.js';
 import { createToasts, showToast } from './ui/toasts.js';
-import { showResults } from './ui/results.js';
+import { createSafeHousePrompt } from './ui/safeHousePrompt.js';
 import { showLoading, hideLoading } from './ui/loading.js';
+import { showMenu, confirmScreen, showQuit } from './ui/screens/menu.js';
+import { showHub } from './ui/screens/hub.js';
+import { showMarket } from './ui/screens/market.js';
+import { showPrep } from './ui/screens/prep.js';
+import { showResults } from './ui/screens/results.js';
+import { loadProfile, newProfile, saveProfile, applyRunResult } from './meta/profile.js';
+import { modifiersFromProfile, richGhostsBonus, UNLOCKS } from './meta/marketCatalog.js';
 import { WEAPON } from './game/config/weapons.js';
 
 const RUN_SCENE_URL = new URL('./game/runScene.js', import.meta.url).href;
@@ -15,36 +24,99 @@ const RUN_SCENE_URL = new URL('./game/runScene.js', import.meta.url).href;
  */
 export async function boot(WEED, { dev }) {
   const uiRoot = document.getElementById('ui-root');
-  const game = new WEED.GameEngine({ debug: dev, hotReload: dev });
+  // preventContextMenu: el click derecho es una orden (foco), no el menú del navegador.
+  const game = new WEED.GameEngine({ debug: dev, hotReload: dev, preventContextMenu: true });
   window.game = game;
-
-  showLoading(uiRoot);
-  // Lo que la run necesita de afuera (perfil, loadout, capítulo) viaja en data:
-  // los workers no tienen localStorage.
-  const data = { chapter: 1, startRecruits: 1, startWeapon: WEAPON.FISTS, ...devOverrides(dev) };
-  await game.loadScene(RUN_SCENE_URL, { data });
-  hideLoading();
-
-  createHud(uiRoot, { dev });
   createToasts(uiRoot);
-  listenToRun(game.currentScene, uiRoot);
+  const ctx = { WEED, game, uiRoot, dev };
+
+  for (;;) {
+    const saved = loadProfile();
+    const choice = await showMenu(uiRoot, { canContinue: saved !== null, chapter: saved?.chapter });
+    if (choice === 'quit') {
+      await showQuit(uiRoot);
+      continue;
+    }
+    let profile = saved;
+    if (choice === 'new') {
+      if (saved && !(await confirmScreen(uiRoot, 'PARTIDA NUEVA', 'Se borra todo lo comprado y desbloqueado.', 'BORRAR', 'CANCELAR'))) continue;
+      profile = newProfile();
+      saveProfile(profile);
+    }
+    applyDevProfile(profile, dev);
+    await playSeason(ctx, profile);
+  }
 }
 
-/** Eventos raros que mandan las entidades de la run (emit). */
-function listenToRun(scene, uiRoot) {
-  // Primera vez en la run que el malón junta cada arma: la desbloquea para el mercado (fase 6).
-  scene.on('weaponFound', (data) => showToast(`¡Encontraste: ${data.name.toUpperCase()}!`));
+/** La partida: entre capítulos, hasta que el jugador sale al menú. */
+async function playSeason(ctx, profile) {
+  for (;;) {
+    const choice = await showHub(ctx.uiRoot, profile);
+    if (choice === 'exit') return;
+    if (choice === 'market') {
+      await showMarket(ctx.uiRoot, profile);
+      continue;
+    }
+    const loadout = await showPrep(ctx.uiRoot, profile);
+    if (!loadout) continue;
+    await playChapter(ctx, profile, loadout);
+  }
+}
+
+/** Un capítulo: carga la run, espera a que se terminen los reclutas, cobra y muestra resultados. */
+async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
+  const data = {
+    chapter: profile.chapter,
+    startRecruits: loadout.startRecruits,
+    weapons: loadout.weapons,
+    armor: loadout.armor,
+    startWeapon: WEAPON.FISTS,
+    modifiers: modifiersFromProfile(profile),
+    ...devRunOverrides(dev),
+  };
+
+  showLoading(uiRoot);
+  await game.loadScene(RUN_SCENE_URL, { data });
+  hideLoading();
+  WEED.Time.scale = 1;
+
+  const hud = createHud(uiRoot, { dev });
+  const scene = game.currentScene;
+  const barPrompt = createSafeHousePrompt(uiRoot, scene, WEED.Camera);
+  scene.onToast = showToast;
+  // Primera vez en la run que el malón junta cada arma (o un chaleco): habilita su desbloqueo.
+  scene.on('weaponFound', (d) => showToast(`¡Encontraste: ${d.name.toUpperCase()}!`));
   scene.on('armorFound', () => showToast('¡Encontraste: CHALECO!'));
-  // Sin reclutas: fin del capítulo.
-  scene.onRunEnded = (summary) => showResults(uiRoot, summary);
+  const summary = await new Promise((resolve) => {
+    scene.onRunEnded = resolve;
+  });
+
+  // Congela la run de fondo mientras se ven los menús; el próximo capítulo carga una escena nueva.
+  WEED.Time.scale = 0;
+  hud.destroy();
+  barPrompt.destroy();
+  const bonus = richGhostsBonus(summary);
+  const newlyFound = applyRunResult(profile, summary, summary.money + bonus.total);
+  await showResults(uiRoot, summary, bonus, newlyFound);
 }
 
 /**
- * En dev, hasta que existan el mercado y la preparación:
- *   ?recruits=N           arranca con N reclutas
- *   ?weapon=bat|pistol|shotgun|smg   todos arrancan con esa arma
+ * En dev, para probar sin jugar mil capítulos:
+ *   ?money=N         suma N al perfil al entrar
+ *   ?found=all       todo encontrado (se pueden comprar todos los desbloqueos)
+ *   ?recruits=N      arranca cada capítulo con N reclutas
+ *   ?weapon=bat|pistol|shotgun|smg   los reclutas sin arma del loadout arrancan con esa
  */
-function devOverrides(dev) {
+function applyDevProfile(profile, dev) {
+  if (!dev) return;
+  const q = new URLSearchParams(location.search);
+  const money = Number(q.get('money'));
+  if (Number.isFinite(money) && money > 0) profile.money += money;
+  if (q.get('found') === 'all') for (const u of UNLOCKS) profile.found[u.key] = true;
+  saveProfile(profile);
+}
+
+function devRunOverrides(dev) {
   if (!dev) return {};
   const q = new URLSearchParams(location.search);
   const out = {};

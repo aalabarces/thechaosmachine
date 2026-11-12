@@ -81,43 +81,185 @@ body {
   color: #ff4040;
 }
 
-/* Fin de capítulo. */
-.results {
+/* ------------------------------------------------------------ pantallas entre capítulos */
+
+.screen {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.72);
+  /* flex + margin auto en la tarjeta: centrada si entra, scrolleable desde arriba si no. */
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.82);
   pointer-events: auto;
-  animation: results-in 0.6s ease-out;
+  overflow-y: auto;
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  animation: screen-in 0.35s ease-out;
 }
 
-.results-card {
-  min-width: min(360px, 86vw);
-  padding: 24px 28px;
+.screen-card {
+  margin: auto;
+  width: min(520px, 100%);
+  padding: 22px 24px;
   border: 3px solid #d63030;
   background: #111;
   text-align: center;
+  box-sizing: border-box;
 }
 
-.results-title {
-  font-size: 34px;
+.screen-title {
+  font-size: 28px;
   font-weight: bold;
   color: #ff4040;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
 }
 
-.results-sub {
-  margin: 4px 0 16px;
+.screen-title.big {
+  font-size: 38px;
+  line-height: 1.1;
+}
+
+.screen-sub {
+  margin: 6px 0 14px;
   color: #aaa;
   font-size: 14px;
 }
 
+.screen-money {
+  margin: 4px 0 14px;
+  font-size: 26px;
+  font-weight: bold;
+  color: #7dff6a;
+}
+
+.screen-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.screen-buttons.row {
+  flex-direction: row;
+  justify-content: center;
+}
+
+.screen-button {
+  font: bold 17px 'Courier New', monospace;
+  padding: 11px 18px;
+  border: 2px solid #555;
+  background: #222;
+  color: #fff;
+  cursor: pointer;
+}
+
+.screen-button.primary {
+  border-color: #d63030;
+  background: #d63030;
+}
+
+.screen-button.danger {
+  border-color: #ff4040;
+  color: #ff4040;
+}
+
+.screen-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* El mercado es ancho y en dos columnas: entra entero en 1920×1080 (en el celular, una columna). */
+.screen-card.market {
+  width: min(1000px, 100%);
+}
+
+.screen-card.market .shop-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* Mercado y preparación: filas con nombre, descripción y precio / cantidad. */
+.shop-section {
+  margin: 14px 0 6px;
+  color: #ffd23f;
+  font-weight: bold;
+  text-align: left;
+}
+
+.shop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #1b1b1b;
+  text-align: left;
+}
+
+.shop-row.locked {
+  opacity: 0.5;
+}
+
+.shop-row.done .buy {
+  color: #7dff6a;
+  border-color: #2f6f2a;
+  opacity: 1;
+}
+
+.shop-info {
+  flex: 1;
+}
+
+.shop-name {
+  font-weight: bold;
+}
+
+.shop-desc {
+  color: #999;
+  font-size: 13px;
+}
+
+.screen-button.buy {
+  min-width: 96px;
+  padding: 8px 10px;
+  font-size: 15px;
+  color: #7dff6a;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-button.step {
+  width: 38px;
+  padding: 6px 0;
+}
+
+.stepper-value {
+  min-width: 2ch;
+  font-weight: bold;
+  text-align: center;
+}
+
+.prep-summary {
+  margin-top: 12px;
+  font-weight: bold;
+  text-align: right;
+}
+
+/* Resultados del capítulo. */
 .results-stats {
   display: grid;
   grid-template-columns: auto auto;
-  gap: 6px 18px;
-  margin: 0 0 20px;
+  gap: 5px 18px;
+  margin: 0 0 14px;
   text-align: left;
 }
 
@@ -131,16 +273,44 @@ body {
   text-align: right;
 }
 
-.results-button {
-  font: bold 18px 'Courier New', monospace;
-  padding: 10px 22px;
-  border: 0;
-  background: #d63030;
-  color: #fff;
-  cursor: pointer;
+.results-stats.pay {
+  padding-top: 10px;
+  border-top: 1px solid #333;
 }
 
-@keyframes results-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.results-stats dd.total {
+  font-size: 22px;
+}
+
+.results-new {
+  margin: 4px 0 6px;
+  color: #ffd23f;
+  font-weight: bold;
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Aviso sobre el bar con reclutas cerca. */
+.safehouse-prompt {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 4px 10px;
+  border: 2px solid #40e0ff;
+  background: rgba(20, 16, 28, 0.85);
+  color: #ff4fb8;
+  font-size: 15px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.safehouse-prompt.poor {
+  border-color: #555;
+  color: #888;
 }

@@ -38,6 +38,12 @@ export const RECRUIT = {
   lootGiveUpMs: 3500,
   /** Probabilidad de gritar al recibir un golpe o un balazo. */
   painSoundChance: 0.5,
+  /**
+   * Orden de moverse: el recluta no pelea ni lootea hasta llegar a esta distancia de su puesto,
+   * o hasta que pase marchTimeoutMs (por si se traba en el camino).
+   */
+  marchArriveRadius: 60,
+  marchTimeoutMs: 8000,
   /** Variación individual de la velocidad máxima (± fracción). */
   speedJitter: 0.06,
 };
@@ -90,6 +96,8 @@ export const COMBAT = {
   muzzleHeight: 16,
   /** Cuánto dura la estela de un disparo en pantalla (ms). */
   tracerMs: 70,
+  /** Empujón extra de una explosión fuerte (px/s), además del de un golpe. */
+  blastPush: 260,
   /** Un disparo asusta a los civiles a esta distancia del que dispara (px; limitado por su visualRange). */
   gunshotPanicRadius: 300,
 };
@@ -190,8 +198,72 @@ export const DIRECTOR = {
   gangRefillMs: 2500,
   /** La fuerza del malón: 1 por recluta + esto por cada punto de rank de su arma. */
   strengthPerWeaponRank: 0.5,
+  /** Plata extra de los enemigos por punto de fuerza del malón (0.03 = +3 % por punto). */
+  enemyMoneyPerStrength: 0.03,
   /** Sin reclutas durante esto, se termina la run (ms). */
   runEndDelayMs: 1500,
+};
+
+/**
+ * Explosiones (systems/explosions.js): daño en un radio, que baja con la distancia, y un empujón.
+ * Las personas y los props que quedan adentro reciben el mensaje 'blast'.
+ */
+export const EXPLOSION = {
+  /** Auto destrozado: explota y deja fuego. */
+  car: { damage: 90, radius: 150, push: 420, shake: 14, sound: 'boomLong', fire: true },
+  /** Mina pisada. */
+  mine: { damage: 120, radius: 110, push: 480, shake: 10, sound: 'boomShort', fire: false },
+  /** Tamaño en pantalla de la animación por cada px de radio. */
+  spritePerRadius: 1.4,
+  /** Sacudida de cámara: a esta distancia del centro de la pantalla ya no se siente (px). */
+  shakeFalloff: 1400,
+  shakeMs: 260,
+};
+
+/** Fuego que queda después de una explosión: quema a quien esté adentro. */
+export const FIRE = {
+  lifeMs: 7000,
+  radius: 55,
+  /** Daño cada tickMs a cada persona adentro. */
+  damage: 7,
+  tickMs: 450,
+  /** Tamaño en pantalla (px de alto). */
+  height: 70,
+};
+
+/** Minas escondidas en la ciudad: explotan cuando alguien (de cualquier bando) las pisa. */
+export const MINES = {
+  count: 30,
+  /** Las pisa quien pase a menos de esto (px). */
+  triggerRadius: 16,
+  /** No aparecen cerca del punto de partida (px). */
+  minDistanceFromStart: 800,
+  minSpacing: 250,
+  /** Tamaño en pantalla (px de ancho). */
+  width: 18,
+};
+
+/**
+ * Safe houses (bares): con reclutas cerca, tocar el bar compra un recluta nuevo con la plata
+ * de esta run, cada vez más caro (GDD).
+ */
+export const SAFE_HOUSE = {
+  count: 3,
+  /** Una a esta distancia del punto de partida como máximo, para que se descubra rápido (px). */
+  nearStartDistance: 1200,
+  minSpacing: 2200,
+  /** Algún recluta tiene que estar a menos de esto de la puerta (px). */
+  useRadius: 260,
+  /** Precio del primer recluta y cuánto se multiplica con cada compra (por run). */
+  basePrice: 80,
+  priceGrowth: 1.35,
+  /** Zona de toque alrededor del cartel (px de mundo). */
+  touchHalfWidth: 120,
+  touchUp: 190,
+  touchDown: 70,
+  /** El cartel se dibuja frente a la casa, a esta altura sobre la vereda (px). */
+  signOffsetY: 40,
+  signWidth: 60,
 };
 
 /** Cosas rompibles. hp = cuánto aguantan; lootTable en config/lootTables.js. */
@@ -249,6 +321,12 @@ export const NAV = {
 };
 
 export const INPUT = {
+  /**
+   * Click derecho: radio (px de mundo) para elegir lo que está bajo el puntero. Las personas y los
+   * props se miden desde el centro de su dibujo (más arriba de los pies).
+   */
+  pickRadius: 26,
+  pickRadiusCar: 46,
   /** Manteniendo apretado, el destino sigue al dedo/mouse cuando se movió al menos esto (px de mundo)... */
   dragMinStep: 40,
   /** ...y pasó al menos este tiempo desde la última actualización (ms). Cada destino nuevo pide un flowfield. */

@@ -19,5 +19,7 @@ export class Brain extends Component {
     goalX: Float32Array, // a dónde va cuando no pelea (patrulla de las pandillas)
     goalY: Float32Array,
     zone: Int8Array, // zona de pandilla (-1 = ninguna)
+    marching: Uint8Array, // recluta: 1 mientras cumple una orden de moverse (no pelea ni lootea)
+    marchMs: Float32Array, // cuánto lleva marchando (para no quedar pasivo si se traba)
   };
 }

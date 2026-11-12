@@ -15,10 +15,39 @@ export const SQUAD_STATE_SCHEMA = {
   orderId: { type: Uint32Array, length: 1 },
   /** Centro de los reclutas vivos [x, y]: la policía lo caza. */
   centroid: { type: Float32Array, length: 2 },
+  /**
+   * Foco (click derecho): todo el malón va por esta entidad. focusTarget -1 = sin foco.
+   * focusKind: FOCUS.ATTACK o FOCUS.LOOT. focusType: su entityType al marcarla (si el índice se
+   * recicla para otra entidad, deja de valer). focusId sube con cada foco nuevo.
+   */
+  focusTarget: { type: Int32Array, length: 1 },
+  focusKind: { type: Uint8Array, length: 1 },
+  focusType: { type: Int32Array, length: 1 },
+  focusId: { type: Uint32Array, length: 1 },
   /** Reclutas vivos y "fuerza" del malón (cantidad + calidad de armas), para escalar la dificultad. */
   alive: { type: Int32Array, length: 1 },
   strength: { type: Float32Array, length: 1 },
 };
+
+export const FOCUS = {
+  NONE: 0,
+  ATTACK: 1,
+  LOOT: 2,
+};
+
+/** Marca un foco (página). También mueve el destino del malón hasta ahí. */
+export function setSquadFocus(index, kind, entityType, x, y) {
+  SquadState.focusTarget[0] = index;
+  SquadState.focusKind[0] = kind;
+  SquadState.focusType[0] = entityType;
+  SquadState.focusId[0]++;
+  setSquadTarget(x, y);
+}
+
+export function clearSquadFocus() {
+  SquadState.focusTarget[0] = -1;
+  SquadState.focusKind[0] = FOCUS.NONE;
+}
 
 export function setSquadTarget(x, y) {
   SquadState.target[0] = x;

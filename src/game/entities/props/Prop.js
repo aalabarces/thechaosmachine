@@ -35,19 +35,25 @@ export class Prop extends GameObject {
     this.rigidBody.static = 1;
     this.setTint(0xffffff);
     Health.hp[i] = this.constructor.stats.hp;
+    this.lastAttacker = -1;
     Health.maxHp[i] = this.constructor.stats.hp;
     Faction.id[i] = FACTION.PROP;
     Loot.money[i] = rollMoney(this.constructor.lootTable);
   }
 
-  onMessage(name, from, a, b, c) {
+  /** Quién le pegó por última vez (campo por hilo: solo lo lee breakApart, en el mismo worker). */
+  lastAttacker = -1;
+
+  onMessage(name, from, a, b, c, d) {
     if (name === 'hit') this.takeHit(a, from);
+    else if (name === 'blast') this.takeHit(a, d > 0 ? d - 1 : -1);
   }
 
   /** @param {number} from quién pegó (para saber si fue el malón y sumar heat) */
   takeHit(damage, from = -1) {
     const i = this.index;
     if (Health.hp[i] <= 0) return;
+    if (from >= 0) this.lastAttacker = from;
     Health.hp[i] -= damage;
     const C = this.constructor;
     emitDebris(this.x, this.y, PROPS.debrisPerHit, C.debrisTint);

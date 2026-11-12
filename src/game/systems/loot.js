@@ -3,6 +3,7 @@
 import { LOOT_TABLES, ITEM } from '../config/lootTables.js';
 import { ARMOR } from '../config/weapons.js';
 import { Drop, DROP_KIND } from '../entities/Drop.js';
+import { RunModifiers } from './runModifiers.js';
 
 const { NavGrid, rng } = WEED;
 
@@ -31,8 +32,13 @@ export function dropLoot(tableName, x, y, money, ring = 0) {
   for (let k = 0; k < t.items.length; k++) {
     const item = t.items[k];
     if (rng() >= item.chance) continue;
-    if (item.kind === ITEM.WEAPON) spawnAround(x, y, ring, DROP_KIND.WEAPON, item.weapon);
-    else if (item.kind === ITEM.ARMOR) spawnAround(x, y, ring, DROP_KIND.ARMOR, ARMOR.amount);
+    // Un arma (o el chaleco) solo aparece al azar si ya está desbloqueada en el mercado. Antes, la
+    // primera hay que sacársela a un enemigo que la lleve (Person.die suelta el arma siempre).
+    if (item.kind === ITEM.WEAPON) {
+      if (RunModifiers.weaponUnlocked[item.weapon]) spawnAround(x, y, ring, DROP_KIND.WEAPON, item.weapon);
+    } else if (item.kind === ITEM.ARMOR) {
+      if (RunModifiers.armorUnlocked[0]) spawnAround(x, y, ring, DROP_KIND.ARMOR, ARMOR.amount);
+    }
   }
 }
 
