@@ -333,13 +333,6 @@ export class RunScene extends Scene {
     }
     const now = performance.now();
     if (Mouse.isButton0Pressed) {
-      // Un toque sobre un bar con reclutas cerca compra un recluta en vez de mover al malón.
-      const bar = this.safeHouses.tap(Mouse.x, Mouse.y);
-      if (bar.handled) {
-        if (bar.message) this.onToast?.(bar.message);
-        this._pressAt = Infinity; // ese toque no arrastra el destino
-        return;
-      }
       this._pressAt = now;
       this._lastDragAt = now;
       this._pressX = Mouse.x;

@@ -1,6 +1,7 @@
-// Safe houses (GDD): bares repartidos por el mapa. Con algún recluta cerca, tocar el bar invierte
-// plata de esta run en un recluta nuevo que aparece en la puerta; cada uno cuesta más que el
-// anterior. Corre en la página (RunScene): el toque, la plata y el aviso con el precio.
+// Safe houses (GDD): bares repartidos por el mapa. Con algún recluta cerca, se abre un menú
+// (ui/safeHouseMenu.js) para invertir plata de esta run en reclutas nuevos que aparecen en la
+// puerta; cada uno cuesta más que el anterior. Comprar es siempre a propósito: con el botón del
+// menú, nunca tocando el mapa. Corre en la página (RunScene).
 
 import { SAFE_HOUSE } from '../config/balance.js';
 import { WEAPON } from '../config/weapons.js';
@@ -15,7 +16,7 @@ export class SafeHouses {
     /** @type {{ x: number, y: number, doorX: number, doorY: number }[]} */
     this.houses = [];
     this.bought = 0;
-    /** Lo que muestra el aviso flotante (ui/safeHousePrompt.js): el bar en uso más cercano. */
+    /** Lo que muestra el menú del bar (ui/safeHouseMenu.js): si hay un bar con reclutas cerca y el precio. */
     this.prompt = { visible: false, x: 0, y: 0, price: 0, affordable: false };
   }
 
@@ -63,27 +64,18 @@ export class SafeHouses {
   }
 
   /**
-   * Un toque en (wx, wy). Si es sobre un bar con reclutas cerca, intenta comprar.
-   * @returns {{ handled: boolean, message?: string }} handled: el toque fue al bar (no es una orden de moverse)
+   * Compra un recluta en el bar que tiene reclutas cerca (el botón del menú).
+   * @returns {{ ok: boolean, message: string }}
    */
-  tap(wx, wy) {
-    const h = this._houseAt(wx, wy);
-    if (!h || !this._hasRecruitNear(h)) return { handled: false };
+  buy() {
+    const h = this._usableHouse();
+    if (!h) return { ok: false, message: 'No hay ningún recluta cerca del bar' };
     const price = this.price();
-    if (RunState.money.load() < price) return { handled: true, message: `Falta plata: el recluta cuesta $${price}` };
+    if (RunState.money.load() < price) return { ok: false, message: `Falta plata: el recluta cuesta $${price}` };
     RunState.money.add(-price);
     this.bought++;
     Recruit.spawn({ x: h.doorX + (Math.random() - 0.5) * 20, y: h.doorY, weapon: WEAPON.FISTS });
-    return { handled: true, message: `+1 recluta (−$${price})` };
-  }
-
-  _houseAt(wx, wy) {
-    for (const h of this.houses) {
-      const dx = wx - h.x;
-      const dy = wy - h.y;
-      if (Math.abs(dx) <= SAFE_HOUSE.touchHalfWidth && dy >= -SAFE_HOUSE.touchUp && dy <= SAFE_HOUSE.touchDown) return h;
-    }
-    return null;
+    return { ok: true, message: `+1 recluta (−$${price})` };
   }
 
   _usableHouse() {

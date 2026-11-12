@@ -259,8 +259,8 @@ export const MINES = {
 };
 
 /**
- * Safe houses (bares): con reclutas cerca, tocar el bar compra un recluta nuevo con la plata
- * de esta run, cada vez más caro (GDD).
+ * Safe houses (bares): con reclutas cerca aparece un menú para comprar reclutas nuevos con la
+ * plata de esta run, cada vez más caros (GDD).
  */
 export const SAFE_HOUSE = {
   count: 3,
@@ -272,10 +272,6 @@ export const SAFE_HOUSE = {
   /** Precio del primer recluta y cuánto se multiplica con cada compra (por run). */
   basePrice: 80,
   priceGrowth: 1.35,
-  /** Zona de toque alrededor del cartel (px de mundo). */
-  touchHalfWidth: 120,
-  touchUp: 190,
-  touchDown: 70,
   /** El cartel se dibuja frente a la casa, a esta altura sobre la vereda (px). */
   signOffsetY: 40,
   signWidth: 60,

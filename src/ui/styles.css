@@ -297,20 +297,46 @@ body {
   }
 }
 
-/* Aviso sobre el bar con reclutas cerca. */
-.safehouse-prompt {
+/* Menú del bar (con reclutas cerca de una safe house): abajo al centro, fácil de tocar. */
+.bar-menu {
   position: absolute;
-  transform: translate(-50%, -100%);
-  padding: 4px 10px;
-  border: 2px solid #40e0ff;
-  background: rgba(20, 16, 28, 0.85);
-  color: #ff4fb8;
-  font-size: 15px;
-  font-weight: bold;
-  white-space: nowrap;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  min-width: min(320px, 86vw);
+  padding: 10px 16px 14px;
+  border: 3px solid #40e0ff;
+  background: rgba(20, 16, 28, 0.92);
+  text-align: center;
+  pointer-events: auto;
+  animation: screen-in 0.25s ease-out;
 }
 
-.safehouse-prompt.poor {
-  border-color: #555;
+.bar-menu-title {
+  color: #ff4fb8;
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 4px;
+}
+
+.bar-menu-hint {
+  margin: 2px 0 10px;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.bar-menu-buy {
+  width: 100%;
+  font: bold 18px 'Courier New', monospace;
+  padding: 10px 14px;
+  border: 0;
+  background: #ff4fb8;
+  color: #fff;
+  cursor: pointer;
+}
+
+.bar-menu-buy:disabled {
+  background: #444;
   color: #888;
+  cursor: default;
 }

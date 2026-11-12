@@ -5,7 +5,7 @@
 
 import { createHud } from './ui/hud.js';
 import { createToasts, showToast } from './ui/toasts.js';
-import { createSafeHousePrompt } from './ui/safeHousePrompt.js';
+import { createSafeHouseMenu } from './ui/safeHouseMenu.js';
 import { showLoading, hideLoading } from './ui/loading.js';
 import { showMenu, confirmScreen, showQuit } from './ui/screens/menu.js';
 import { showHub } from './ui/screens/hub.js';
@@ -90,7 +90,7 @@ async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
 
   const hud = createHud(uiRoot, { dev });
   const scene = game.currentScene;
-  const barPrompt = createSafeHousePrompt(uiRoot, scene, WEED.Camera);
+  const barMenu = createSafeHouseMenu(uiRoot, scene, showToast);
   scene.onToast = showToast;
   // Primera vez en la run que el malón junta cada arma (o un chaleco): habilita su desbloqueo.
   scene.on('weaponFound', (d) => showToast(`¡Encontraste: ${d.name.toUpperCase()}!`));
@@ -102,7 +102,7 @@ async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
   // Congela la run de fondo mientras se ven los menús; el próximo capítulo carga una escena nueva.
   WEED.Time.scale = 0;
   hud.destroy();
-  barPrompt.destroy();
+  barMenu.destroy();
   const bonus = richGhostsBonus(summary);
   const newlyFound = applyRunResult(profile, summary, summary.money + bonus.total);
   await showResults(uiRoot, summary, bonus, newlyFound);
