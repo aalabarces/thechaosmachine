@@ -20,6 +20,39 @@ export const RECRUIT = {
   scaleSpan: 0.12,
 };
 
+export const SQUAD = {
+  /** Tope de reclutas vivos a la vez (tamaño del pool). */
+  maxRecruits: 640,
+  /** Distancia entre puestos de la formación (espiral alrededor del destino), px. */
+  formationSpacing: 24,
+  /** Más cerca que esto del destino o del puesto, el recluta va en línea recta; más lejos, sigue el pathfinding. */
+  directRadius: 140,
+  /** Cada recluta empuja a los compañeros que tiene más cerca que esto (px). */
+  separationRadius: 26,
+  /** Aceleración máxima de ese empuje (px/s²). */
+  separationForce: 700,
+  /** Alcance con el que cada recluta ve a sus vecinos (spatial hash), px. */
+  visualRange: 80,
+};
+
+export const NAV = {
+  /** Lado de la celda del NavGrid (px). El engine bloquea toda celda que toque la caja de un obstáculo. */
+  cellSize: 48,
+  /** Un recluta parado en una celda bloqueada (pegado a un árbol) busca la libre más cercana hasta estos anillos de celdas. */
+  escapeRings: 3,
+  /** Si el destino cae en una celda bloqueada (click sobre un árbol), se corre a la libre más cercana hasta estos anillos. */
+  goalRings: 5,
+};
+
+export const INPUT = {
+  /** Manteniendo apretado, el destino sigue al dedo/mouse cuando se movió al menos esto (px de mundo)... */
+  dragMinStep: 40,
+  /** ...y pasó al menos este tiempo desde la última actualización (ms). Cada destino nuevo pide un flowfield. */
+  dragIntervalMs: 120,
+  /** Tiempo apretado antes de que empiece el arrastre (ms): un click corto es solo un click. */
+  dragDelayMs: 150,
+};
+
 export const PERSON_ANIM = {
   /** Por debajo de esta velocidad se lo considera quieto (px/s). */
   walkSpeedThreshold: 12,
@@ -34,4 +67,6 @@ export const CAMERA = {
   maxZoom: 2.5,
   followSmoothing: 0.12,
   wheelSensitivity: 0.0015,
+  /** El zoom recorre ~63 % de lo que le falta en este tiempo (ms). Más alto = más suave y más lento. */
+  zoomSmoothingMs: 90,
 };

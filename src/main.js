@@ -18,8 +18,15 @@ export async function boot(WEED, { dev }) {
   showLoading(uiRoot);
   // Lo que la run necesita de afuera (perfil, loadout, capítulo) viaja en data:
   // los workers no tienen localStorage.
-  await game.loadScene(RUN_SCENE_URL, { data: { chapter: 1 } });
+  await game.loadScene(RUN_SCENE_URL, { data: { chapter: 1, startRecruits: devStartRecruits(dev) } });
   hideLoading();
 
   createHud(uiRoot, { dev });
+}
+
+/** En dev, `?recruits=N` arranca la run con N reclutas (hasta que exista el mercado). */
+function devStartRecruits(dev) {
+  if (!dev) return 1;
+  const n = Number(new URLSearchParams(location.search).get('recruits'));
+  return Number.isFinite(n) && n > 0 ? n : 1;
 }

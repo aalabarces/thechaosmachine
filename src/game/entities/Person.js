@@ -4,7 +4,7 @@
 
 import { PERSON_ANIM } from '../config/balance.js';
 
-const { GameObject, RigidBody, Collider, SpriteRenderer, ShapeType, rng } = WEED;
+const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, rng } = WEED;
 
 const DIR_NAMES = ['up', 'left', 'down', 'right'];
 const DIR_UP = 0;
@@ -56,7 +56,6 @@ export class Person extends GameObject {
    * @returns {number} distancia² al destino
    */
   steerTo(tx, ty, maxSpeed, arriveRadius, stopRadius, responsiveness) {
-    const i = this.index;
     const dx = tx - this.x;
     const dy = ty - this.y;
     const d2 = dx * dx + dy * dy;
@@ -68,8 +67,46 @@ export class Person extends GameObject {
       desiredX = (dx / d) * speed;
       desiredY = (dy / d) * speed;
     }
-    this.addAcceleration((desiredX - RigidBody.vx[i]) * responsiveness, (desiredY - RigidBody.vy[i]) * responsiveness);
+    this.steerVelocity(desiredX, desiredY, responsiveness);
     return d2;
+  }
+
+  /** Acelera para acercar la velocidad actual a (desiredX, desiredY) px/s. */
+  steerVelocity(desiredX, desiredY, responsiveness) {
+    const i = this.index;
+    this.addAcceleration((desiredX - RigidBody.vx[i]) * responsiveness, (desiredY - RigidBody.vy[i]) * responsiveness);
+  }
+
+  /**
+   * Empuja lejos de los vecinos de la misma clase que estén a menos de `radius`.
+   * Necesita collider.visualRange > radius para que el spatial hash los reporte como vecinos.
+   */
+  applySeparation(radius, force) {
+    const myX = this.x;
+    const myY = this.y;
+    const myType = this.entityType;
+    const r2 = radius * radius;
+    let ax = 0;
+    let ay = 0;
+    for (let n = 0; n < this.neighborCount; n++) {
+      const ni = this.getNeighbor(n);
+      if (!Transform.active[ni] || Transform.entityType[ni] !== myType) continue;
+      const dx = myX - Transform.x[ni];
+      const dy = myY - Transform.y[ni];
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= r2) continue;
+      if (d2 < 0.01) {
+        // Encimados: un empujón al azar para destrabarlos.
+        ax += rng() - 0.5;
+        ay += rng() - 0.5;
+        continue;
+      }
+      const d = Math.sqrt(d2);
+      const push = 1 - d / radius;
+      ax += (dx / d) * push;
+      ay += (dy / d) * push;
+    }
+    if (ax !== 0 || ay !== 0) this.addAcceleration(ax * force, ay * force);
   }
 
   /** Frena hasta quedarse quieto. */
