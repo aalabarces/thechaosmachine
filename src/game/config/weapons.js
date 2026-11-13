@@ -25,9 +25,7 @@ export const WEAPON = {
  * @property {number} cooldownMs
  * @property {number} [pellets]   perdigones por disparo
  * @property {number} [spread]    desvío máximo de cada perdigón (radianes)
- * @property {string} [sound]
- * @property {number} [soundVolume]
- * @property {number} [soundRate] velocidad de reproducción (tono)
+ * @property {string} sfx         efecto de config/sounds.js (SFX) al pegar o disparar
  * @property {string} [icon]      textura del drop y de lo que lleva en la mano
  * @property {number} [iconWidth] ancho en px del drop
  */
@@ -42,6 +40,7 @@ WEAPONS[WEAPON.FISTS] = {
   damage: 12,
   range: 8,
   cooldownMs: 650,
+  sfx: 'punch',
 };
 
 WEAPONS[WEAPON.BAT] = {
@@ -51,6 +50,7 @@ WEAPONS[WEAPON.BAT] = {
   damage: 26,
   range: 14,
   cooldownMs: 800,
+  sfx: 'batHit',
   icon: 'drop_bat', // assets/img/drops/bat.png: placeholder generado
   iconWidth: 20,
 };
@@ -64,9 +64,7 @@ WEAPONS[WEAPON.PISTOL] = {
   cooldownMs: 550,
   pellets: 1,
   spread: 0.06,
-  sound: 'pistol',
-  soundVolume: 0.45,
-  soundRate: 1,
+  sfx: 'pistol',
   icon: 'drop_pistol',
   iconWidth: 18,
 };
@@ -80,9 +78,7 @@ WEAPONS[WEAPON.SHOTGUN] = {
   cooldownMs: 1100,
   pellets: 6,
   spread: 0.28,
-  sound: 'pistol', // no hay sonido propio: la pistola más grave
-  soundVolume: 0.6,
-  soundRate: 0.7,
+  sfx: 'shotgun',
   icon: 'drop_shotgun',
   iconWidth: 28,
 };
@@ -96,9 +92,7 @@ WEAPONS[WEAPON.SMG] = {
   cooldownMs: 110,
   pellets: 1,
   spread: 0.13,
-  sound: 'smg',
-  soundVolume: 0.3,
-  soundRate: 1,
+  sfx: 'smg',
   icon: 'drop_smg',
   iconWidth: 30,
 };

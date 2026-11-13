@@ -225,9 +225,9 @@ export const DIRECTOR = {
  */
 export const EXPLOSION = {
   /** Auto destrozado: explota y deja fuego. */
-  car: { damage: 90, radius: 150, push: 420, shake: 14, sound: 'boomLong', fire: true },
+  car: { damage: 90, radius: 150, push: 420, shake: 14, sfx: 'boomCar', fire: true },
   /** Mina pisada. */
-  mine: { damage: 120, radius: 110, push: 480, shake: 10, sound: 'boomShort', fire: false },
+  mine: { damage: 120, radius: 110, push: 480, shake: 10, sfx: 'boomMine', fire: false },
   /** Tamaño en pantalla de la animación por cada px de radio. */
   spritePerRadius: 1.4,
   /** Sacudida de cámara: a esta distancia del centro de la pantalla ya no se siente (px). */

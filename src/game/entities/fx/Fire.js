@@ -5,8 +5,9 @@ import { FIRE } from '../../config/balance.js';
 import { Health } from '../../components/Health.js';
 import { Faction } from '../../components/Faction.js';
 import { FACTION } from '../../config/factions.js';
+import { playSfx } from '../../systems/sfx.js';
 
-const { GameObject, SpriteRenderer, Transform, Query, Tween, PARTICLE_EASE, SoundManager } = WEED;
+const { GameObject, SpriteRenderer, Transform, Query, Tween, PARTICLE_EASE } = WEED;
 
 /** Alto del cuadro de la animación 'fire' (assets/img/fx/fire). */
 const FRAME_HEIGHT = 150;
@@ -34,7 +35,7 @@ export class Fire extends GameObject {
     this.setScale(s, s);
     this.setAlpha(1);
     Tween.to(this.index, { alpha: 0 }, 800, PARTICLE_EASE.QUAD_IN, { delay: FIRE.lifeMs - 800, onComplete: 'fireOut' });
-    SoundManager.play('fire', 0.5, 0.95, 1.05, 0, 0, x, y);
+    playSfx('fire', x, y);
   }
 
   tick(dtRatio) {

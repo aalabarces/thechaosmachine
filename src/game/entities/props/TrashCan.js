@@ -11,7 +11,7 @@ export class TrashCan extends Prop {
   static stats = PROPS.trashCan;
   static lootTable = 'trashCan';
   static debrisTint = 0x6f7d62;
-  static hitSounds = ['metal1', 'metal2'];
+  static hitSfx = 'metalHit';
 
   onSpawned(spawnConfig = {}) {
     super.onSpawned(spawnConfig);

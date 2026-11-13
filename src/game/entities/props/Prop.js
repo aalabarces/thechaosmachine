@@ -11,8 +11,9 @@ import { Faction } from '../../components/Faction.js';
 import { Loot } from '../../components/Loot.js';
 import { dropLoot, rollMoney } from '../../systems/loot.js';
 import { emitDebris } from '../../systems/effects.js';
+import { playSfx } from '../../systems/sfx.js';
 
-const { GameObject, RigidBody, Collider, SpriteRenderer, SoundManager, ShapeType, rng } = WEED;
+const { GameObject, RigidBody, Collider, SpriteRenderer, ShapeType, rng } = WEED;
 
 /** El botín cae a esta distancia del borde del prop (px), afuera de su collider. */
 const LOOT_MARGIN = 18;
@@ -25,8 +26,9 @@ export class Prop extends GameObject {
   static lootTable = null;
   /** Color de los pedazos que saltan. */
   static debrisTint = 0x888888;
-  /** Sonidos al recibir un golpe (se elige uno al azar). */
-  static hitSounds = ['punch'];
+  /** Efecto (config/sounds.js) al recibir un golpe y al romperse. */
+  static hitSfx = 'metalHit';
+  static breakSfx = 'metalHit';
 
   onSpawned({ x = 0, y = 0 } = {}) {
     this.x = x;
@@ -58,7 +60,7 @@ export class Prop extends GameObject {
     const C = this.constructor;
     emitDebris(this.x, this.y, PROPS.debrisPerHit, C.debrisTint);
     this.onHitEffect();
-    SoundManager.play(C.hitSounds[(rng() * C.hitSounds.length) | 0], 0.5, 0.9, 1.1, 0, 0, this.x, this.y);
+    playSfx(C.hitSfx, this.x, this.y);
     if (Health.hp[i] <= 0) {
       if (from >= 0 && Faction.id[from] === FACTION.PLAYER) RunState.heat.add(HEAT.propBreak);
       this.breakApart();
@@ -71,6 +73,7 @@ export class Prop extends GameObject {
   breakApart() {
     const i = this.index;
     emitDebris(this.x, this.y, PROPS.debrisOnBreak, this.constructor.debrisTint);
+    playSfx(this.constructor.breakSfx, this.x, this.y, 1.3);
     dropLoot(this.constructor.lootTable, this.x, this.y, Loot.money[i], this._lootRing());
     Loot.money[i] = 0;
     // Ya no es un blanco: queda como cobertura (maxHp 0 = indestructible para los disparos).

@@ -12,6 +12,8 @@ import { PersonStats } from '../components/PersonStats.js';
 import { Brain } from '../components/Brain.js';
 import { CivilianFSM } from '../ai/civilianFSM.js';
 import { RunState } from '../systems/runState.js';
+import { VOICE } from '../config/sounds.js';
+import { playSfx } from '../systems/sfx.js';
 import { rollMoney } from '../systems/loot.js';
 
 const { NavGrid, Transform, rng } = WEED;
@@ -114,7 +116,10 @@ export class Civilian extends Person {
     Brain.threatX[i] = x;
     Brain.threatY[i] = y;
     Brain.calmMs[i] = 0;
-    if (CivilianFSM.state[i] !== CivilianFSM.states.FLEE.stateIndex) this.civilianFSM.changeState(CivilianFSM.states.FLEE);
+    if (CivilianFSM.state[i] === CivilianFSM.states.FLEE.stateIndex) return;
+    this.civilianFSM.changeState(CivilianFSM.states.FLEE);
+    // Grito de pánico al empezar a huir (no todos: con una multitud sería un solo ruido).
+    if (rng() < VOICE.panicChance) playSfx('panic', this.x, this.y);
   }
 
   onMessage(name, from, a, b, c, d) {

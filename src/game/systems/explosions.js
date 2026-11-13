@@ -6,16 +6,17 @@
 import { EXPLOSION } from '../config/balance.js';
 import { Health } from '../components/Health.js';
 import { emitDebris } from './effects.js';
+import { playSfx } from './sfx.js';
 import { Explosion } from '../entities/fx/Explosion.js';
 import { Fire } from '../entities/fx/Fire.js';
 
-const { Query, Transform, ParticleEmitter, Decal, SoundManager } = WEED;
+const { Query, Transform, ParticleEmitter, Decal } = WEED;
 
 /**
  * @param {import('../entities/Person.js').Person | object} source la entidad que explota (manda los mensajes)
  * @param {number} x
  * @param {number} y
- * @param {{ damage: number, radius: number, shake: number, sound: string, fire: boolean }} kind EXPLOSION.car / .mine
+ * @param {{ damage: number, radius: number, shake: number, sfx: string, fire: boolean }} kind EXPLOSION.car / .mine
  * @param {number} culprit quién la provocó (-1 = nadie): las muertes y el heat se le anotan a él
  */
 export function explode(source, x, y, kind, culprit = -1) {
@@ -38,7 +39,7 @@ export function explode(source, x, y, kind, culprit = -1) {
   emitSmoke(x, y);
   emitDebris(x, y, 10, 0x3a3a3a, -10);
   Decal.stamp({ x, y, texture: 'scorch', scale: kind.radius / 140, alpha: 0.85 });
-  SoundManager.play(kind.sound, 1, 0.9, 1.1, 0, 0, x, y);
+  playSfx(kind.sfx, x, y);
   // La sacudida la hace la página (la cámara tiene un solo escritor): le avisa por emit.
   source.emit('boom', { x, y, shake: kind.shake });
 }

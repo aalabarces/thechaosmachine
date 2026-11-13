@@ -17,8 +17,9 @@ index.html          import map del engine, raíz de la UI, arranca src/main.js
 assets/             mapa, casas, árboles, personajes (tomados de la demo littleCity)
 src/
   main.js           (página) arranca el engine y el flujo de pantallas
-  ui/               (página) HUD, avisos y screens/: menú, partida, mercado, preparación, resultados
-  meta/             (página) profile.js (localStorage) y marketCatalog.js (mejoras, desbloqueos, precios)
+  ui/               (página) HUD, avisos, pausa, menú del bar, música (music.js) y screens/: menú,
+                    opciones, partida, mercado, preparación, resultados
+  meta/             (página) profile.js y settings.js (localStorage), marketCatalog.js (mejoras, desbloqueos, precios)
   game/             lo cargan la página Y los workers: no importa el engine, usa el global WEED
     runScene.js     la escena de una run (= un capítulo)
     assets.js       URLs de assets relativas al módulo
@@ -48,3 +49,8 @@ Parámetros de dev (solo con `npm run dev`):
 - `?weapon=bat|pistol|shotgun|smg` los reclutas sin arma del loadout arrancan con esa.
 - `?seed=N` siempre la misma ciudad (la semilla de cada capítulo sale en la consola).
 - `?map=littlecity` el mapa viejo de littleCity en vez de una ciudad generada.
+
+Sonido:
+- Efectos: `src/game/config/sounds.js` (catálogo SFX). Varios salen de variar los archivos que hay
+  (tono, volumen, mezcla); para usar uno propio, sumarlo a SOUND_FILES y apuntar su entrada de SFX.
+- Música: mp3 en `assets/audio/music/` (ver LEEME.txt ahí). Sin archivos, el juego anda en silencio.

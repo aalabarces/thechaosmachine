@@ -128,6 +128,10 @@ export class RunScene extends Scene {
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, commandRingCapacity: 16384 },
     renderer: { backend: 'webgl', ySort: true },
     lighting: { enabled: false },
+    // Un solo bus de efectos con más voces que el de fábrica (32): con muchos reclutas tirando
+    // tiros hay muchos sonidos a la vez; si se llena, uno más fuerte reemplaza al más bajo.
+    // La música no pasa por acá: es HTML Audio en la página (ui/music.js) y sigue entre escenas.
+    audio: { maxSlots: 96, channels: { sfx: { volume: 1, pan: 0, maxVoices: 48 } } },
     // Sangre: partículas que caen y quedan como manchas en el piso (decals).
     particle: { maxParticles: 6000, decals: true, decalsTileSize: 256, decalsResolution: 0.5 },
     // El arma en la mano de cada persona es una decoración pegada a ella.
@@ -284,6 +288,13 @@ export class RunScene extends Scene {
     this.safeHouses.update();
     this._maxStars = Math.max(this._maxStars, heatStars(RunState.heat.load()));
     this.checkRunEnd(now);
+  }
+
+  /** Abandonar el capítulo (desde la pausa): termina ya, con lo juntado hasta ahora. */
+  endRunNow() {
+    if (this._ended) return;
+    this._ended = true;
+    this.onRunEnded?.(this.runSummary(performance.now()));
   }
 
   /** Sin reclutas vivos se termina el capítulo. */

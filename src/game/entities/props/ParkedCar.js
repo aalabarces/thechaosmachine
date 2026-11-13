@@ -17,7 +17,9 @@ export class ParkedCar extends Prop {
   static stats = PROPS.parkedCar;
   static lootTable = 'parkedCar';
   static debrisTint = 0x9aa3ad;
-  static hitSounds = ['metal1', 'metal2'];
+  // Cada golpe le rompe algún vidrio; al destrozarse, se rompen todos.
+  static hitSfx = 'glass';
+  static breakSfx = 'glassBreak';
 
   /** @param {{ x: number, y: number, angle?: string }} spawnConfig angle: '0' | '90' | '180' | '270' */
   onSpawned(spawnConfig = {}) {

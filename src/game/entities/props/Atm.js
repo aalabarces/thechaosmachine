@@ -11,7 +11,7 @@ export class Atm extends Prop {
   static stats = PROPS.atm;
   static lootTable = 'atm';
   static debrisTint = 0x7c858f;
-  static hitSounds = ['metal1', 'metal2'];
+  static hitSfx = 'metalHit';
 
   onSpawned(spawnConfig = {}) {
     super.onSpawned(spawnConfig);

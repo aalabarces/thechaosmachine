@@ -5,7 +5,7 @@ import { openScreen, el, button } from './screen.js';
 /**
  * @param {HTMLElement} root
  * @param {{ canContinue: boolean, chapter?: number }} options
- * @returns {Promise<'continue' | 'new' | 'quit'>}
+ * @returns {Promise<'continue' | 'new' | 'options' | 'quit'>}
  */
 export function showMenu(root, { canContinue, chapter = 1 }) {
   return new Promise((resolve) => {
@@ -17,7 +17,11 @@ export function showMenu(root, { canContinue, chapter = 1 }) {
     s.card.append(el('div', 'screen-title big', 'THE CHAOS MACHINE'), el('div', 'screen-sub', 'Una serie sobre el caos. Vos sos el productor.'));
     const list = el('div', 'screen-buttons');
     if (canContinue) list.append(button(`CONTINUAR · CAPÍTULO ${chapter}`, () => done('continue'), 'primary'));
-    list.append(button('PARTIDA NUEVA', () => done('new'), canContinue ? '' : 'primary'), button('SALIR', () => done('quit')));
+    list.append(
+      button('PARTIDA NUEVA', () => done('new'), canContinue ? '' : 'primary'),
+      button('OPCIONES', () => done('options')),
+      button('SALIR', () => done('quit')),
+    );
     s.card.append(list);
   });
 }

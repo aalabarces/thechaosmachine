@@ -6,7 +6,8 @@
 import { PERSON_ANIM, COMBAT, NAV, SQUAD } from '../config/balance.js';
 import { FACTION, isHostile, TARGET_DISTANCE_WEIGHT } from '../config/factions.js';
 import { WEAPONS, WEAPON, ARMOR } from '../config/weapons.js';
-import { PAIN_SOUNDS } from '../config/sounds.js';
+import { VOICE } from '../config/sounds.js';
+import { playSfx } from '../systems/sfx.js';
 import { Health } from '../components/Health.js';
 import { Faction } from '../components/Faction.js';
 import { Loot } from '../components/Loot.js';
@@ -19,7 +20,7 @@ import { emitBlood, emitTracer, emitMuzzle, emitSparks } from '../systems/effect
 import { dropLoot } from '../systems/loot.js';
 import { nearestWalkable } from '../world/navUtils.js';
 
-const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, SoundManager, Ray, Decoration, NavGrid, rng } = WEED;
+const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, Ray, Decoration, NavGrid, rng } = WEED;
 
 const DIR_NAMES = ['up', 'left', 'down', 'right'];
 const DIR_UP = 0;
@@ -514,7 +515,8 @@ export class Person extends GameObject {
     Brain.actionMs[i] = COMBAT.punchAnimMs;
     Brain.cooldownMs[i] = PersonStats.attackCooldownMs[i];
     this.sendTo(target, 'hit', PersonStats.damage[i], this.x, this.y);
-    SoundManager.play('punch', 0.55, 0.85, 1.15, 0, 0, this.x, this.y);
+    playSfx(WEAPONS[WeaponHolder.weapon[i]].sfx ?? 'punch', this.x, this.y);
+    if (rng() < VOICE.gruntChance) playSfx('grunt', this.x, this.y);
     return true;
   }
 
@@ -562,7 +564,7 @@ export class Person extends GameObject {
       this.setAnimationSpeed(SHOOT_ANIM_SPEED);
       Brain.actionMs[i] = SHOOT_ANIM_MS;
     }
-    SoundManager.play(w.sound, w.soundVolume, w.soundRate * 0.95, w.soundRate * 1.05, 0, 0, sx, sy);
+    playSfx(w.sfx, sx, sy);
     if ((this._shots++ & 3) === 0) this._alarmCivilians();
     return 1;
   }
@@ -665,7 +667,7 @@ export class Person extends GameObject {
   onDeath() {}
 
   playPain(volume = 0.7) {
-    SoundManager.play(PAIN_SOUNDS[(rng() * PAIN_SOUNDS.length) | 0], volume, 0.9, 1.1, 0, 0, this.x, this.y);
+    playSfx('pain', this.x, this.y, volume / 0.7);
   }
 
   /** Muere: sangre, grito, cadáver, suelta lo que llevaba y vuelve al pool. */

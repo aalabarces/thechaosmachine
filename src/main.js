@@ -6,6 +6,12 @@
 import { createHud } from './ui/hud.js';
 import { createToasts, showToast } from './ui/toasts.js';
 import { createSafeHouseMenu } from './ui/safeHouseMenu.js';
+import { createPauseControl } from './ui/pauseMenu.js';
+import { music } from './ui/music.js';
+import { showOptions } from './ui/screens/options.js';
+import { loadSettings } from './meta/settings.js';
+import { heatStars } from './game/systems/spawnDirector.js';
+import { RunState } from './game/systems/runState.js';
 import { showLoading, hideLoading } from './ui/loading.js';
 import { showMenu, confirmScreen, showQuit } from './ui/screens/menu.js';
 import { showHub } from './ui/screens/hub.js';
@@ -31,11 +37,18 @@ export async function boot(WEED, { dev }) {
   const game = new WEED.GameEngine({ debug: dev, hotReload: dev, preventContextMenu: true });
   window.game = game;
   createToasts(uiRoot);
-  const ctx = { WEED, game, uiRoot, dev };
+  const settings = loadSettings();
+  music.setVolume(settings.musicVolume);
+  const ctx = { WEED, game, uiRoot, dev, settings };
 
   for (;;) {
+    music.play('menu');
     const saved = loadProfile();
     const choice = await showMenu(uiRoot, { canContinue: saved !== null, chapter: saved?.chapter });
+    if (choice === 'options') {
+      await showOptions(uiRoot, settings, WEED);
+      continue;
+    }
     if (choice === 'quit') {
       await showQuit(uiRoot);
       continue;
@@ -67,7 +80,7 @@ async function playSeason(ctx, profile) {
 }
 
 /** Un capítulo: carga la run, espera a que se terminen los reclutas, cobra y muestra resultados. */
-async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
+async function playChapter({ WEED, game, uiRoot, dev, settings }, profile, loadout) {
   const data = {
     chapter: profile.chapter,
     startRecruits: loadout.startRecruits,
@@ -87,10 +100,36 @@ async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
   await game.loadScene(RUN_SCENE_URL, { data });
   hideLoading();
   WEED.Time.scale = 1;
+  // El volumen de efectos se aplica en cada escena (el engine reinicia el audio al cambiarla).
+  WEED.SoundManager.setMasterVolume(settings.sfxVolume);
+  music.play('run');
 
   const hud = createHud(uiRoot, { dev });
   const scene = game.currentScene;
   const barMenu = createSafeHouseMenu(uiRoot, scene, showToast);
+  const pause = createPauseControl(uiRoot, {
+    dev,
+    settings,
+    WEED,
+    onPause: () => {
+      WEED.Time.scale = 0;
+    },
+    onResume: () => {
+      WEED.Time.scale = 1;
+    },
+    onAbandon: () => {
+      WEED.Time.scale = 1;
+      scene.endRunNow();
+    },
+  });
+  // La música se pone más intensa con el heat.
+  let following = true;
+  const followHeat = () => {
+    if (!following) return;
+    music.setHeatStars(heatStars(RunState.heat.load()));
+    requestAnimationFrame(followHeat);
+  };
+  followHeat();
   scene.onToast = showToast;
   // Primera vez en la run que el malón junta cada arma (o un chaleco): habilita su desbloqueo.
   scene.on('weaponFound', (d) => showToast(`¡Encontraste: ${d.name.toUpperCase()}!`));
@@ -101,8 +140,11 @@ async function playChapter({ WEED, game, uiRoot, dev }, profile, loadout) {
 
   // Congela la run de fondo mientras se ven los menús; el próximo capítulo carga una escena nueva.
   WEED.Time.scale = 0;
+  following = false;
+  music.play('menu');
   hud.destroy();
   barMenu.destroy();
+  pause.destroy();
   const bonus = richGhostsBonus(summary);
   const newlyFound = applyRunResult(profile, summary, summary.money + bonus.total);
   await showResults(uiRoot, summary, bonus, newlyFound);
