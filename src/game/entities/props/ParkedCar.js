@@ -2,11 +2,11 @@
 // como chatarra quemada que sigue sirviendo de cobertura. Adentro: plata, a veces armas o chaleco.
 
 import { Prop } from './Prop.js';
-import { PROPS, EXPLOSION } from '../../config/balance.js';
+import { PROPS, EXPLOSION, SHADOWS } from '../../config/balance.js';
 import { emitGlass } from '../../systems/effects.js';
 import { explode } from '../../systems/explosions.js';
 
-const { ShapeType, rng } = WEED;
+const { ShapeType, VolumeShadowCaster, rng } = WEED;
 
 export const CAR_SHEETS = ['car_red', 'car_blue', 'car_white', 'car_yellow', 'car_black'];
 export const WRECK_SHEET = 'car_burnt';
@@ -14,6 +14,7 @@ export const WRECK_SHEET = 'car_burnt';
 export const CAR_ANGLES = ['0', '90', '180', '270'];
 
 export class ParkedCar extends Prop {
+  static components = [...Prop.components, VolumeShadowCaster];
   static stats = PROPS.parkedCar;
   static lootTable = 'parkedCar';
   static debrisTint = 0x9aa3ad;
@@ -37,6 +38,8 @@ export class ParkedCar extends Prop {
     this.collider.offsetX = 0;
     this.collider.offsetY = 0;
     this.collider.visualRange = 80;
+    // Sombra del sol: una caja del tamaño del auto (solo se ve con calidad alta).
+    this.volumeShadowCaster.setBox(this.collider.width, this.collider.height, SHADOWS.carHeight);
   }
 
   /** '0' | '90' | '180' | '270' (campo por hilo: solo lo usa onBroken, en el mismo worker). */

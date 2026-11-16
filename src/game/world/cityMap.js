@@ -3,13 +3,14 @@
 // frente a las casas). Más adelante mapGenerator.js arma uno al azar con la misma salida.
 
 import { asset } from '../assets.js';
-import { PROPS, NAV, MINES, SPAWN_SAFETY } from '../config/balance.js';
+import { PROPS, NAV, MINES, SPAWN_SAFETY, LAMPS } from '../config/balance.js';
 import { House } from '../entities/props/House.js';
 import { Tree } from '../entities/props/Tree.js';
 import { TrashCan } from '../entities/props/TrashCan.js';
 import { ParkedCar } from '../entities/props/ParkedCar.js';
 import { Atm } from '../entities/props/Atm.js';
 import { Mine } from '../entities/props/Mine.js';
+import { StreetLamp } from '../entities/props/StreetLamp.js';
 
 const { NavGrid, rng } = WEED;
 
@@ -27,6 +28,7 @@ export const CITY_ENTITIES = [
   [ParkedCar, PROPS.parkedCar.count * MAX_PROPS_MULTIPLIER],
   [Atm, PROPS.atm.count * MAX_PROPS_MULTIPLIER],
   [Mine, MINES.count + 5],
+  [StreetLamp, LAMPS.max],
 ];
 
 /** Baja el JSON de objetos del mapa: casas, árboles, celdas de vereda y de calle. */
@@ -51,6 +53,8 @@ export function spawnCity(data, propsMultiplier = 1, start = null) {
   spawnTrashCans(data, Math.round(PROPS.trashCan.count * mul));
   spawnParkedCars(data, Math.round(PROPS.parkedCar.count * mul), start);
   spawnAtms(houses, Math.round(PROPS.atm.count * mul));
+  // Faroles (los ubica el generador; el mapa horneado de littleCity no tiene).
+  for (const l of data.lamps || []) StreetLamp.spawn({ x: l.x, y: l.y, flip: l.flip });
 
   // Los tachos no: son chicos y se rompen enseguida.
   NavGrid.updateNavGrid([

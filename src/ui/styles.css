@@ -401,3 +401,27 @@ canvas {
   text-align: right;
   color: #aaa;
 }
+
+/* Selector de calidad gráfica: botones excluyentes. */
+.option-choice {
+  grid-column: span 2;
+  display: flex;
+  gap: 6px;
+}
+
+.option-choice .screen-button {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: 13px;
+}
+
+.option-choice .screen-button.selected {
+  border-color: #d63030;
+  background: #d63030;
+}
+
+.option-note {
+  color: #888;
+  font-size: 12px;
+  text-align: left;
+}

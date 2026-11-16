@@ -13,6 +13,8 @@
 //
 // Coordenadas: celdas de CELL px. Todo punto que sale (veredas, calles) es el CENTRO de su celda.
 
+import { LAMPS } from '../config/balance.js';
+
 export const CELL = 48;
 
 /** Tipo de terreno de cada celda. */
@@ -153,6 +155,9 @@ export function generateCity(seed, widthPx, heightPx) {
     for (let y = py0; y < py0 + h; y++) for (let x = px0; x < px0 + w; x++) patch[y * W + x] = 1;
   }
 
+  // ---------------------------------------------------------------- faroles
+  const lamps = placeLamps(blocks);
+
   // ---------------------------------------------------------------- listas para el juego
   const sidewalks = [];
   const roadCells = [];
@@ -176,7 +181,42 @@ export function generateCity(seed, widthPx, heightPx) {
     trees,
     sidewalks,
     roads: [{ id: 1, width: ROAD_W, cells: roadCells }],
+    lamps,
   };
+}
+
+/** Cuánto se corren los faroles desde el centro de su celda de vereda hacia la calle (px). */
+const LAMP_EDGE = 16;
+
+/**
+ * Faroles sobre el borde de la vereda que da a la calle: uno en cada esquina de manzana y, en los
+ * lados, cada LAMPS.everyCells celdas. La lámpara mira hacia afuera de la manzana (flip a la izquierda).
+ */
+function placeLamps(blocks) {
+  const out = [];
+  const add = (cx, cy, dx, dy, flip) => {
+    if (out.length >= LAMPS.max) return;
+    out.push({ x: cx * CELL + CELL / 2 + dx * LAMP_EDGE, y: cy * CELL + CELL / 2 + dy * LAMP_EDGE, flip });
+  };
+  const step = LAMPS.everyCells;
+  for (const b of blocks) {
+    const midX = (b.x0 + b.x1) / 2;
+    // Esquinas.
+    add(b.x0, b.y0, -1, -1, true);
+    add(b.x1, b.y0, 1, -1, false);
+    add(b.x0, b.y1, -1, 1, true);
+    add(b.x1, b.y1, 1, 1, false);
+    // Lados de arriba y de abajo, lados izquierdo y derecho.
+    for (let x = b.x0 + step; x <= b.x1 - step / 2; x += step) {
+      add(x, b.y0, 0, -1, x < midX);
+      add(x, b.y1, 0, 1, x < midX);
+    }
+    for (let y = b.y0 + step; y <= b.y1 - step / 2; y += step) {
+      add(b.x0, y, -1, 0, true);
+      add(b.x1, y, 1, 0, false);
+    }
+  }
+  return out;
 }
 
 /** 0 en el centro del mapa, sube a 1 hacia el borde a partir de BLOCK.suburbFrom. */

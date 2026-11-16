@@ -277,6 +277,81 @@ export const SAFE_HOUSE = {
   signWidth: 60,
 };
 
+/**
+ * Iluminación (de la demo buenosAiresScene) y ciclo día/noche (de sunStreetScene). Con la calidad
+ * gráfica 'off' no hay nada de esto: la escena se ve como de día siempre.
+ */
+export const LIGHT = {
+  /** Luz mínima de noche, sin sol ni faroles (0..1). */
+  baseAmbient: 0.05,
+  maxLights: 512,
+  /** Pool de destellos cortos (fogonazos, explosiones). */
+  maxFlashes: 32,
+  maxShadowCastingLights: 8,
+  /** Luz azulada de la noche (la "luna"): cuánto suma y de qué color. */
+  nightIntensity: 0.22,
+  nightColor: 0x5473f2,
+  /** Color del sol por hora (tabla de sunStreetScene). */
+  sunColors: [
+    { hour: 0, color: 0x1a1a2e },
+    { hour: 5, color: 0x2d4a6e },
+    { hour: 6.5, color: 0xff8855 },
+    { hour: 8, color: 0xffeedd },
+    { hour: 12, color: 0xffffff },
+    { hour: 16, color: 0xffeedd },
+    { hour: 18, color: 0xff9a55 },
+    { hour: 19.5, color: 0xff5522 },
+    { hour: 21, color: 0x2d4a6e },
+    { hour: 24, color: 0x1a1a2e },
+  ],
+};
+
+/**
+ * Sombras (solo con calidad gráfica alta). Las casas y los autos tienen una caja de sombra que
+ * proyecta el sol (VolumeShadowCaster, alto en px); los árboles, las personas y los faroles, la
+ * sombra de su dibujo (ShadowCaster, multiplicador de largo).
+ */
+export const SHADOWS = {
+  houseHeight: 150,
+  carHeight: 22,
+  tree: 1,
+  person: 1.2,
+  lamp: 0.8,
+};
+
+/**
+ * Luz de la acción (solo con iluminación): destellos cortos del pool Flash y la luz del fuego.
+ * radius en px, lifespan en ms.
+ */
+export const ACTION_LIGHT = {
+  // glow: halo (hasGlowSprite del engine, 0,5 es el normal).
+  muzzle: { radius: 420, lifespan: 60, color: 0xffcc66, glow: 0.6 },
+  explosion: { radius: 1100, lifespan: 420, color: 0xffaa44, glow: 1 },
+  fire: { radius: 320, color: 0xff7a2a, glow: 0.7, elevation: 30, flicker: 0.18 },
+};
+
+/** El día del capítulo. */
+export const DAY = {
+  /** Cuánto dura un día entero (24 h) en minutos reales. */
+  minutes: 10,
+  /** Cada capítulo empieza a una hora al azar en este rango: de tarde, para que la noche llegue jugando. */
+  startHourMin: 14,
+  startHourMax: 19,
+};
+
+/** Faroles de la calle (de la demo buenosAiresScene): se prenden entre las 18 y las 19 y se apagan entre las 6 y las 7. */
+export const LAMPS = {
+  color: 0xffdcaa,
+  radius: 650,
+  /** Halo de la luz (hasGlowSprite del engine: 0,5 es el normal). */
+  glow: 0.6,
+  /** Escala del dibujo (assets/img/props/lamp.png, 98×317). */
+  scale: 0.45,
+  /** Uno en cada esquina de manzana y, en los lados largos, cada tantas celdas. */
+  everyCells: 12,
+  max: 420,
+};
+
 /** Cosas rompibles. hp = cuánto aguantan; lootTable en config/lootTables.js. */
 export const PROPS = {
   trashCan: { hp: 25, width: 40, colliderRadius: 14, count: 160 },

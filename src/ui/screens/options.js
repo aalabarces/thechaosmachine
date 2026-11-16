@@ -1,5 +1,6 @@
-// Opciones: volumen de música y de efectos, y pantalla completa. Se usan desde el menú
-// principal y desde la pausa. Cada cambio se aplica y se guarda al instante.
+// Opciones: volumen de música y de efectos, calidad gráfica y pantalla completa. Se usan desde el
+// menú principal y desde la pausa. Cada cambio se guarda al instante; los volúmenes se aplican ya,
+// la calidad desde el próximo capítulo (cambia cómo se arma la escena).
 
 import { openScreen, el, button } from './screen.js';
 import { saveSettings } from '../../meta/settings.js';
@@ -23,6 +24,20 @@ export function buildOptions(settings, WEED) {
       WEED.SoundManager.setMasterVolume(v);
       saveSettings(settings);
     }),
+    choice(
+      'Gráficos',
+      [
+        ['high', 'ALTA'],
+        ['low', 'BAJA'],
+        ['off', 'SIN LUCES'],
+      ],
+      settings.graphics,
+      (v) => {
+        settings.graphics = v;
+        saveSettings(settings);
+      },
+    ),
+    el('div', 'option-note', 'Alta: luces, sombras y noche · Baja: sin sombras · Sin luces: como de día siempre. Vale desde el próximo capítulo.'),
   );
   if (document.fullscreenEnabled) {
     const fs = button(fullscreenLabel(), async () => {
@@ -60,6 +75,23 @@ export function showOptions(root, settings, WEED) {
 
 function fullscreenLabel() {
   return document.fullscreenElement ? 'SALIR DE PANTALLA COMPLETA' : 'PANTALLA COMPLETA';
+}
+
+/** Fila con botones excluyentes (como un selector). */
+function choice(label, options, value, onChange) {
+  const row = el('div', 'option-row');
+  const group = el('div', 'option-choice');
+  const buttons = options.map(([v, text]) => {
+    const b = button(text, () => {
+      for (const o of buttons) o.classList.toggle('selected', o === b);
+      onChange(v);
+    });
+    b.classList.toggle('selected', v === value);
+    return b;
+  });
+  group.append(...buttons);
+  row.append(el('span', 'option-name', label), group);
+  return row;
 }
 
 function slider(label, value, onChange) {

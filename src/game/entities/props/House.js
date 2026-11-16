@@ -2,11 +2,12 @@
 
 import { HOUSE_COUNT } from '../../config/sprites.js';
 import { pad2 } from '../../assets.js';
+import { SHADOWS } from '../../config/balance.js';
 
-const { GameObject, Collider, SpriteRenderer, RigidBody, ShapeType, rng } = WEED;
+const { GameObject, Collider, SpriteRenderer, RigidBody, VolumeShadowCaster, ShapeType, rng } = WEED;
 
 export class House extends GameObject {
-  static components = [Collider, SpriteRenderer, RigidBody];
+  static components = [Collider, SpriteRenderer, RigidBody, VolumeShadowCaster];
 
   onSpawned({ x = 0, y = 0 } = {}) {
     this.x = x;
@@ -22,5 +23,7 @@ export class House extends GameObject {
     this.collider.offsetY = -50;
     this.collider.visualRange = 300;
     this.setScale(1, 1);
+    // Sombra del sol: una caja sobre la huella del collider (solo se ve con calidad alta).
+    this.volumeShadowCaster.setBox(200, 110, SHADOWS.houseHeight, { offsetY: -50 });
   }
 }

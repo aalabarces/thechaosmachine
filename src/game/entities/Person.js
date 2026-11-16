@@ -3,7 +3,7 @@
 // buscar hostiles, pegar o disparar con el arma que lleve, recibir daño (el chaleco absorbe
 // parte), morir (cadáver + sangre) y soltar lo que llevaba: plata, el arma y su tabla de loot.
 
-import { PERSON_ANIM, COMBAT, NAV, SQUAD } from '../config/balance.js';
+import { PERSON_ANIM, COMBAT, NAV, SQUAD, SHADOWS, ACTION_LIGHT } from '../config/balance.js';
 import { FACTION, isHostile, TARGET_DISTANCE_WEIGHT } from '../config/factions.js';
 import { WEAPONS, WEAPON, ARMOR } from '../config/weapons.js';
 import { VOICE } from '../config/sounds.js';
@@ -19,8 +19,10 @@ import { Drop, DROP_KIND, weaponLook } from './Drop.js';
 import { emitBlood, emitTracer, emitMuzzle, emitSparks } from '../systems/effects.js';
 import { dropLoot } from '../systems/loot.js';
 import { nearestWalkable } from '../world/navUtils.js';
+import { RunModifiers } from '../systems/runModifiers.js';
+import { lightIntensityFor } from '../systems/lightHours.js';
 
-const { GameObject, RigidBody, Collider, SpriteRenderer, Transform, ShapeType, Ray, Decoration, NavGrid, rng } = WEED;
+const { GameObject, RigidBody, Collider, SpriteRenderer, ShadowCaster, Transform, ShapeType, Ray, Decoration, NavGrid, Flash, rng } = WEED;
 
 const DIR_NAMES = ['up', 'left', 'down', 'right'];
 const DIR_UP = 0;
@@ -59,7 +61,7 @@ function facingFromVelocity(vx, vy) {
 }
 
 export class Person extends GameObject {
-  static components = [RigidBody, Collider, SpriteRenderer, Health, Faction, Loot, PersonStats, Brain, WeaponHolder];
+  static components = [RigidBody, Collider, SpriteRenderer, ShadowCaster, Health, Faction, Loot, PersonStats, Brain, WeaponHolder];
 
   /** Hojas LPC posibles para esta clase (las subclases la definen). */
   static spritesheets = [];
@@ -70,6 +72,8 @@ export class Person extends GameObject {
   static lootTable = null;
   /** visualRange mínimo de la clase; con un arma de fuego se agranda a su alcance. */
   static baseVisualRange = 100;
+  /** Largo de la sombra (multiplicador del ShadowCaster); 0 = sin sombra. */
+  static shadowHeight = SHADOWS.person;
   /** ¿Su hoja tiene una pose de disparo con arma (shoot_*)? La de la policía sí. */
   static shootAnimation = false;
 
@@ -103,6 +107,8 @@ export class Person extends GameObject {
     this.collider.visualRange = C.baseVisualRange;
     this.rigidBody.linearDamping = s.linearDamping;
     this.setFixedRotation(1);
+    // Sombra del dibujo (solo se ve con calidad alta).
+    this.shadowCaster.heightMultiplier = C.shadowHeight;
 
     Health.hp[i] = s.hp;
     Health.maxHp[i] = s.hp;
@@ -558,6 +564,11 @@ export class Person extends GameObject {
       emitTracer(sx, sy, _shot.x, _shot.y);
     }
     emitMuzzle(sx, sy, dx, dy);
+    // De noche, cada tiro ilumina la cuadra un instante (sin sombras: son muchos y muy cortos).
+    if (RunModifiers.lightingOn[0] === 1) {
+      const m = ACTION_LIGHT.muzzle;
+      Flash.spawn({ x: sx + dx * 12, y: sy + dy * 12, z: COMBAT.muzzleHeight, lifespan: m.lifespan, color: m.color, intensity: lightIntensityFor(m.radius), hasGlowSprite: m.glow, castShadows: false });
+    }
     if (this.constructor.shootAnimation) {
       this._anim = 'action';
       this.setAnimation(SHOOT[this._facing], false);

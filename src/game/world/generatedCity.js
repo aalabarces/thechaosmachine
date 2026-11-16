@@ -22,7 +22,7 @@ export function prepareCity(seed, widthPx, heightPx) {
   current = {
     seed,
     // Mismo formato que el JSON de objetos del mapa horneado (cityMap.js lo consume igual).
-    objects: { houses: city.houses, trees: city.trees, sidewalks: city.sidewalks, roads: city.roads },
+    objects: { houses: city.houses, trees: city.trees, sidewalks: city.sidewalks, roads: city.roads, lamps: city.lamps },
     tilemapUrl: json(tilemap),
     flowfieldUrl: json(flow),
   };

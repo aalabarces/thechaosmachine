@@ -3,14 +3,16 @@
 // mancha de quemado en el piso, pedazos, sonido, sacudida de cámara y, si corresponde, fuego.
 // Corre en los workers (la llama quien explota: un auto, una mina).
 
-import { EXPLOSION } from '../config/balance.js';
+import { EXPLOSION, ACTION_LIGHT } from '../config/balance.js';
+import { RunModifiers } from './runModifiers.js';
+import { lightIntensityFor } from './lightHours.js';
 import { Health } from '../components/Health.js';
 import { emitDebris } from './effects.js';
 import { playSfx } from './sfx.js';
 import { Explosion } from '../entities/fx/Explosion.js';
 import { Fire } from '../entities/fx/Fire.js';
 
-const { Query, Transform, ParticleEmitter, Decal } = WEED;
+const { Query, Transform, ParticleEmitter, Decal, Flash } = WEED;
 
 /**
  * @param {import('../entities/Person.js').Person | object} source la entidad que explota (manda los mensajes)
@@ -35,6 +37,10 @@ export function explode(source, x, y, kind, culprit = -1) {
   }
 
   Explosion.spawn({ x, y, size: kind.radius * EXPLOSION.spritePerRadius });
+  if (RunModifiers.lightingOn[0] === 1) {
+    const f = ACTION_LIGHT.explosion;
+    Flash.spawn({ x, y, z: 20, lifespan: f.lifespan, color: f.color, intensity: lightIntensityFor(f.radius), hasGlowSprite: f.glow });
+  }
   if (kind.fire) Fire.spawn({ x, y, culprit });
   emitSmoke(x, y);
   emitDebris(x, y, 10, 0x3a3a3a, -10);

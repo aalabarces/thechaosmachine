@@ -2,11 +2,12 @@
 
 import { TREE_COUNT } from '../../config/sprites.js';
 import { pad2 } from '../../assets.js';
+import { SHADOWS } from '../../config/balance.js';
 
-const { GameObject, Collider, SpriteRenderer, RigidBody, ShapeType, rng } = WEED;
+const { GameObject, Collider, SpriteRenderer, RigidBody, ShadowCaster, ShapeType, rng } = WEED;
 
 export class Tree extends GameObject {
-  static components = [Collider, SpriteRenderer, RigidBody];
+  static components = [Collider, SpriteRenderer, RigidBody, ShadowCaster];
 
   onSpawned({ x = 0, y = 0, radius = 18 } = {}) {
     this.x = x;
@@ -22,5 +23,6 @@ export class Tree extends GameObject {
     this.collider.shapeType = ShapeType.Circle;
     this.collider.radius = radius;
     this.collider.visualRange = radius * 10;
+    this.shadowCaster.heightMultiplier = SHADOWS.tree;
   }
 }

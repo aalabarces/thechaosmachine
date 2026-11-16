@@ -21,7 +21,8 @@ import { showResults } from './ui/screens/results.js';
 import { loadProfile, newProfile, saveProfile, applyRunResult } from './meta/profile.js';
 import { modifiersFromProfile, richGhostsBonus, UNLOCKS } from './meta/marketCatalog.js';
 import { WEAPON } from './game/config/weapons.js';
-import { WORLD } from './game/config/balance.js';
+import { WORLD, DAY } from './game/config/balance.js';
+import { setRunVisuals } from './game/systems/runVisuals.js';
 import { prepareCity, clearCity } from './game/world/generatedCity.js';
 
 const RUN_SCENE_URL = new URL('./game/runScene.js', import.meta.url).href;
@@ -88,8 +89,12 @@ async function playChapter({ WEED, game, uiRoot, dev, settings }, profile, loado
     armor: loadout.armor,
     startWeapon: WEAPON.FISTS,
     modifiers: modifiersFromProfile(profile),
+    // A qué hora empieza el capítulo: de tarde, al azar, para que la noche llegue jugando.
+    startHour: DAY.startHourMin + Math.random() * (DAY.startHourMax - DAY.startHourMin),
     ...devRunOverrides(dev),
   };
+  // Calidad gráfica y duración del día: la escena los lee al construirse (ver runVisuals.js).
+  setRunVisuals({ graphics: settings.graphics, dayMinutes: devDayMinutes(dev) ?? DAY.minutes });
 
   showLoading(uiRoot);
   // Cada capítulo, una ciudad nueva (GDD: mapa generado al azar). La escena la toma al construirse.
@@ -174,6 +179,8 @@ function discardHotReloadRestore() {
  *   ?recruits=N      arranca cada capítulo con N reclutas
  *   ?weapon=bat|pistol|shotgun|smg   los reclutas sin arma del loadout arrancan con esa
  *   ?seed=N          siempre la misma ciudad generada (la semilla de cada capítulo sale en la consola)
+ *   ?hour=N          el capítulo empieza a esa hora (0..24)
+ *   ?dayMinutes=N    un día entero dura N minutos reales
  *   ?map=littlecity  el mapa viejo de littleCity en vez de una ciudad generada
  */
 function applyDevProfile(profile, dev) {
@@ -192,10 +199,19 @@ function devSeed(dev) {
   return Number.isFinite(n) && n > 0 ? n | 0 : null;
 }
 
+/** ?dayMinutes=N: un día entero en N minutos reales (dev). */
+function devDayMinutes(dev) {
+  if (!dev) return null;
+  const n = Number(new URLSearchParams(location.search).get('dayMinutes'));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function devRunOverrides(dev) {
   if (!dev) return {};
   const q = new URLSearchParams(location.search);
   const out = {};
+  const hour = Number(q.get('hour'));
+  if (q.get('hour') !== null && Number.isFinite(hour)) out.startHour = ((hour % 24) + 24) % 24;
   const n = Number(q.get('recruits'));
   if (Number.isFinite(n) && n > 0) out.startRecruits = n;
   const w = WEAPON[(q.get('weapon') || '').toUpperCase()];

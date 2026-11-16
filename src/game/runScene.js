@@ -8,7 +8,7 @@
 // Cuando no quedan reclutas, llama a scene.onRunEnded(resumen) (lo asigna main.js).
 
 import { asset, pad2 } from './assets.js';
-import { WORLD, CAMERA, SQUAD, INPUT, NAV, CIVILIAN, POLICE, GANG, DIRECTOR, EXPLOSION, MINES } from './config/balance.js';
+import { WORLD, CAMERA, SQUAD, INPUT, NAV, CIVILIAN, POLICE, GANG, DIRECTOR, EXPLOSION, MINES, LIGHT } from './config/balance.js';
 import { SHEETS, ROLE_ANIMATIONS, excludedAnimations, HOUSE_COUNT, TREE_COUNT } from './config/sprites.js';
 import { SOUND_FILES } from './config/sounds.js';
 import { Recruit } from './entities/Recruit.js';
@@ -29,13 +29,14 @@ import { CAR_SHEETS, WRECK_SHEET, CAR_ANGLES } from './entities/props/ParkedCar.
 import { WEAPON, WEAPONS, ARMOR } from './config/weapons.js';
 import { CITY_ENTITIES, loadCityData, spawnCity, spawnMines, nearestSidewalk } from './world/cityMap.js';
 import { getPreparedCity } from './world/generatedCity.js';
+import { getRunVisuals } from './systems/runVisuals.js';
 import { SquadState, SQUAD_STATE_SCHEMA, setSquadTarget, squadCentroid, setSquadFocus, clearSquadFocus, FOCUS } from './systems/squadState.js';
 import { pickAt, isFocusValid } from './systems/picking.js';
 import { RunState, RUN_STATE_SCHEMA } from './systems/runState.js';
 import { RunModifiers, RUN_MODIFIERS_SCHEMA, writeRunModifiers } from './systems/runModifiers.js';
 import { heatStars } from './systems/spawnDirector.js';
 
-const { Scene, Camera, Mouse, Transform, LAYER_KIND } = WEED;
+const { Scene, Camera, Mouse, Transform, LAYER_KIND, BLEND_MODES, Sun, Layer } = WEED;
 
 function numberedTextures(prefix, folder, count) {
   const out = {};
@@ -84,9 +85,71 @@ function clamp(v, min, max) {
 
 const _centroid = { x: 0, y: 0 };
 
+/** Todo lo que no depende de la calidad gráfica. */
+const BASE_CONFIG = {
+  worldWidth: WORLD.width,
+  worldHeight: WORLD.height,
+  spatial: { cellSize: 128, maxNeighbors: 128 },
+  // Civiles con tickInterval 2: staggeredUpdates reparte sus ticks entre frames pares e impares.
+  logic: { numberOfLogicWorkers: 1, staggeredUpdates: true },
+  // El mapa crea ~1300 cuerpos estáticos de una vez: el anillo de comandos tiene que entrarlos.
+  physics: { gravity: { x: 0, y: 0 }, sleeping: true, commandRingCapacity: 16384 },
+  renderer: { backend: 'webgl', ySort: true },
+  // Un solo bus de efectos con más voces que el de fábrica (32): con muchos reclutas tirando
+  // tiros hay muchos sonidos a la vez; si se llena, uno más fuerte reemplaza al más bajo.
+  // La música no pasa por acá: es HTML Audio en la página (ui/music.js) y sigue entre escenas.
+  audio: { maxSlots: 96, channels: { sfx: { volume: 1, pan: 0, maxVoices: 48 } } },
+  // Sangre: partículas que caen y quedan como manchas en el piso (decals).
+  particle: { maxParticles: 6000, decals: true, decalsTileSize: 256, decalsResolution: 0.5 },
+  // El arma en la mano de cada persona y los brillos de faroles y faros son decoraciones.
+  decoration: { maxDecorations: 3000 },
+  navigation: { enabled: true, cellSize: NAV.cellSize },
+  layers: {
+    ground: { kind: LAYER_KIND.TILEMAP, tilemap: 'city', scale: 1, zIndex: 0.5 },
+    // Brillos aditivos encima de todo (de buenosAiresScene): una capa de sprites se suma con
+    // shader.containerBlend, no con blendMode solo.
+    glows: { zIndex: 5.5, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 600 },
+    lampGlows: { zIndex: 5.6, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 1200 },
+  },
+};
+
+/**
+ * Iluminación según la calidad: 'high' luces y sombras, 'low' luces sin sombras, 'off' nada.
+ * Sol con ciclo de día (sunStreetScene): sale, se pone, y de noche queda la luz azulada.
+ * Sin raycast ni caras: son caros y nuestros dibujos no los necesitan.
+ */
+function lightingConfig(graphics, dayMinutes) {
+  if (graphics === 'off') return { enabled: false };
+  return {
+    enabled: true,
+    baseAmbient: LIGHT.baseAmbient,
+    lightGlow: 'sprite',
+    maxLights: LIGHT.maxLights,
+    maxFlashes: LIGHT.maxFlashes,
+    raycasted: false,
+    shadowsEnabled: graphics === 'high',
+    shadowTextures: false,
+    maxShadowCastingLights: LIGHT.maxShadowCastingLights,
+    maxShadowsPerLight: 32,
+    maxShadowsPerEntity: 2,
+    sun: {
+      enabled: true,
+      startHour: 12, // la real la pone create() (Sun.setTimeOfDay), distinta en cada capítulo
+      maxElevation: 60,
+      shadowAngleOffset: 0,
+      shadowAlpha: 0.5,
+      shadowMinLengthRatio: 0.35,
+      dayCycle: { enabled: true, speed: 1, dayDurationMinutes: dayMinutes },
+      night: { intensity: LIGHT.nightIntensity, color: LIGHT.nightColor, from: 0.4, to: 0.1 },
+      colors: LIGHT.sunColors,
+    },
+  };
+}
+
 /** Texturas y hojas de la run (el tilemap y el flowfield van aparte: dependen de la ciudad). */
 const STATIC_ASSETS = {
   textures: {
+    lamp: asset('img/props/lamp.png'),
     ...numberedTextures('house', 'houses', HOUSE_COUNT),
     ...numberedTextures('tree', 'trees', TREE_COUNT),
     blood: asset('img/fx/blood.png'),
@@ -118,29 +181,18 @@ const STATIC_ASSETS = {
 };
 
 export class RunScene extends Scene {
-  static config = {
-    worldWidth: WORLD.width,
-    worldHeight: WORLD.height,
-    spatial: { cellSize: 128, maxNeighbors: 128 },
-    // Civiles con tickInterval 2: staggeredUpdates reparte sus ticks entre frames pares e impares.
-    logic: { numberOfLogicWorkers: 1, staggeredUpdates: true },
-    // El mapa crea ~1300 cuerpos estáticos de una vez: el anillo de comandos tiene que entrarlos.
-    physics: { gravity: { x: 0, y: 0 }, sleeping: true, commandRingCapacity: 16384 },
-    renderer: { backend: 'webgl', ySort: true },
-    lighting: { enabled: false },
-    // Un solo bus de efectos con más voces que el de fábrica (32): con muchos reclutas tirando
-    // tiros hay muchos sonidos a la vez; si se llena, uno más fuerte reemplaza al más bajo.
-    // La música no pasa por acá: es HTML Audio en la página (ui/music.js) y sigue entre escenas.
-    audio: { maxSlots: 96, channels: { sfx: { volume: 1, pan: 0, maxVoices: 48 } } },
-    // Sangre: partículas que caen y quedan como manchas en el piso (decals).
-    particle: { maxParticles: 6000, decals: true, decalsTileSize: 256, decalsResolution: 0.5 },
-    // El arma en la mano de cada persona es una decoración pegada a ella.
-    decoration: { maxDecorations: 1500 },
-    navigation: { enabled: true, cellSize: NAV.cellSize },
-    layers: {
-      ground: { kind: LAYER_KIND.TILEMAP, tilemap: 'city', scale: 1, zIndex: 0.5 },
-    },
-  };
+  /**
+   * Getter: la iluminación depende de la calidad gráfica que eligió el jugador (runVisuals, la escribe
+   * main.js antes de cargar). La escena la lee al construirse, en la página; los workers reciben la
+   * config ya armada.
+   */
+  static get config() {
+    const v = getRunVisuals();
+    return {
+      ...BASE_CONFIG,
+      lighting: lightingConfig(v.graphics, v.dayMinutes),
+    };
+  }
 
   /**
    * Getter: el tilemap y el flowfield de veredas son los de la ciudad que generó main.js para este
@@ -196,7 +248,17 @@ export class RunScene extends Scene {
   /** @param {{ modifiers?: object }} [data] lo que manda main.js (ver createNewGame) */
   create(data = {}) {
     // Las mejoras del perfil, antes de que aparezca nadie: los reclutas las leen al spawnear.
-    writeRunModifiers(data?.modifiers);
+    const lightingOn = getRunVisuals().graphics !== 'off';
+    writeRunModifiers(data?.modifiers, lightingOn);
+    // La hora del capítulo (la elige main.js); de ahí corre el ciclo del día.
+    if (lightingOn) Sun.setTimeOfDay(data?.startHour ?? 17);
+    // Las sombras de caja (casas, autos) van en su propia capa; fuera de la calidad alta se esconde.
+    // Las de los dibujos ya las apaga shadowsEnabled.
+    if (getRunVisuals().graphics !== 'high') {
+      const volumes = Layer.get('volumeShadows');
+      if (volumes) volumes.visible = false;
+      if (Layer.castedShadows) Layer.castedShadows.visible = false;
+    }
     // Punto de partida del malón: hace falta antes de armar la ciudad (sin autos cerca) y para las
     // safe houses (una cerca de acá).
     this._start = nearestSidewalk(this.cityData, WORLD.width / 2, WORLD.height / 2);
