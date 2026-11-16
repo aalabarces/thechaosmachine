@@ -5,3 +5,7 @@ Música del juego (hard rock / heavy metal, en loop). Poné acá estos archivos 
   run_intense.mp3   capítulo con heat alto (2 estrellas o más)
 
 Si falta alguno, esa parte queda en silencio. Configuración: src/ui/music.js (MUSIC).
+
+menu: Survival Metal - with solo by LiteSaturation -- https://freesound.org/s/787359/ -- License: Attribution NonCommercial 4.0
+run_calm: Ambush.wav by zagi2 -- https://freesound.org/s/501079/ -- License: Attribution NonCommercial 4.0
+run_intense: gaming circuit beat.wav by zagi2 -- https://freesound.org/s/345391/ -- License: Attribution NonCommercial 4.0

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="./src/ui/styles.css" />
     <!-- npm run build swaps in the production engine -->
     <script type="importmap">
-      { "imports": { "@weed.js/engine": "./node_modules/@weed.js/engine/dist/weed.bundle.esm.min.js" } }
+      { "imports": { "@weed.js/engine": "https://cdn.jsdelivr.net/npm/@weed.js/engine@^0.14.0/dist/weed.prod.bundle.esm.min.js" } }
     </script>
   </head>
   <body>
@@ -19,7 +19,7 @@
     <div id="ui-root"></div>
 
     <script type="module">
-      import WEED from '@weed.js/engine';
+      import WEED from 'https://cdn.jsdelivr.net/npm/@weed.js/engine@^0.14.0/dist/weed.prod.bundle.esm.min.js';
 
       const DEV = true; // npm run build sets this to false
       // El juego se importa después del engine: sus módulos usan el global WEED que este import define.
